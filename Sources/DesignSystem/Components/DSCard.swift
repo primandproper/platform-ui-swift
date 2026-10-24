@@ -141,6 +141,12 @@ public struct DSCardModifier: ViewModifier {
   let padding: CGFloat
   let cornerRadius: CGFloat
 
+  public init(style: DSCardStyle, padding: CGFloat, cornerRadius: CGFloat) {
+    self.style = style
+    self.padding = padding
+    self.cornerRadius = cornerRadius
+  }
+
   public func body(content: Content) -> some View {
     content
       .padding(padding)

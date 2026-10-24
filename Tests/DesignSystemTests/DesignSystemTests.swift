@@ -327,3 +327,46 @@ struct ComponentInstantiationTests {
     _ = DSListRow(title: "Title")
   }
 }
+
+// MARK: - Public Construction Tests
+
+/// Built through the public API alone (this target imports DesignSystem without @testable), so
+/// a component whose initializer is internal fails to compile here rather than in an app.
+@MainActor
+struct PublicConstructionTests {
+  @Test("Every component can be constructed from outside the module")
+  func testPublicInitializers() {
+    _ = DSButton("Title") {}
+    _ = DSButtonLink("Title", destination: EmptyView())
+    _ = DSIconButton("plus") {}
+    _ = DSCard { EmptyView() }
+    _ = EmptyView().dsCard()
+    _ = DSCardModifier(style: .standard, padding: 0, cornerRadius: 0)
+    _ = DSDivider()
+    _ = DSDivider(style: .soft, horizontalInset: 8)
+    _ = DSSoftDivider()
+    _ = DSSoftDivider(verticalSpacing: 4, horizontalInset: 8)
+    _ = DSInfoRow(icon: "cart", text: "Text", color: .blue)
+    _ = DSInfoRow(icon: "cart", text: "Text", color: .blue, showChevron: false, strikethrough: true)
+    _ = DSStepperButtons(onDecrement: {}, onIncrement: {})
+    _ = DSLoadingView()
+    _ = DSErrorView("Message", accessory: AnyView(Text("Accessory")))
+    _ = DSContentState(isLoading: false) { EmptyView() }
+    _ = DSInitializingView()
+    _ = DSEmptyState(icon: "tray", title: "Title", message: "Message")
+    _ = DSSection("Title") { EmptyView() }
+    _ = DSSectionHeader(title: "Title")
+    _ = DSRuleFlankedHeader(title: "Title", color: .orange)
+    _ = DSSectionEmptyContent("Message")
+    _ = DSListRow(title: "Title")
+    _ = DSListRowLink(title: "Title", destination: EmptyView())
+    _ = DSListDivider()
+    _ = DSTextField("Placeholder", text: .constant(""))
+    _ = DSFieldGroup("Label") { EmptyView() }
+    _ = DSAvatar(name: "Jane Doe")
+    _ = DSAvatarView(initials: "JD")
+    _ = DSAvatarGroup(names: ["Jane", "John"])
+    _ = DSStatusBadge(.pending)
+    _ = DSStatusDot(status: "accepted")
+  }
+}

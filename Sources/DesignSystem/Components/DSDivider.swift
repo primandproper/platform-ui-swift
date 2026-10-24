@@ -30,6 +30,11 @@ public struct DSDivider: View {
   var style: DSDividerStyle = .standard
   var horizontalInset: CGFloat = 0
 
+  public init(style: DSDividerStyle = .standard, horizontalInset: CGFloat = 0) {
+    self.style = style
+    self.horizontalInset = horizontalInset
+  }
+
   public var body: some View {
     switch style {
     case .standard:
@@ -58,6 +63,14 @@ public struct DSDivider: View {
 public struct DSSoftDivider: View {
   var verticalSpacing: CGFloat = DSTheme.Spacing.md
   var horizontalInset: CGFloat = DSTheme.Spacing.xl * 2
+
+  public init(
+    verticalSpacing: CGFloat = DSTheme.Spacing.md,
+    horizontalInset: CGFloat = DSTheme.Spacing.xl * 2
+  ) {
+    self.verticalSpacing = verticalSpacing
+    self.horizontalInset = horizontalInset
+  }
 
   public var body: some View {
     VStack(spacing: 0) {

@@ -26,6 +26,20 @@ public struct DSInfoRow: View {
   var showChevron: Bool = true
   var strikethrough: Bool = false
 
+  public init(
+    icon: String,
+    text: String,
+    color: Color,
+    showChevron: Bool = true,
+    strikethrough: Bool = false
+  ) {
+    self.icon = icon
+    self.text = text
+    self.color = color
+    self.showChevron = showChevron
+    self.strikethrough = strikethrough
+  }
+
   public var body: some View {
     HStack(spacing: DSTheme.Spacing.md) {
       ZStack {
