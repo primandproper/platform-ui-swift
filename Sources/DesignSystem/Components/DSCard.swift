@@ -7,36 +7,36 @@
 
 import SwiftUI
 
-// MARK: - Card Style
+// MARK: - Card Variant
 
-public enum DSCardStyle {
+public enum DSCardVariant: Sendable {
   case standard
   case elevated
   case outlined
   case selected
   case interactive
 
-  public var backgroundColor: Color {
+  public func backgroundColor(in theme: DSTheme) -> Color {
     switch self {
     case .standard:
-      return DSTheme.Colors.cardBackground
+      return theme.colors.cardBackground
     case .elevated:
-      return DSTheme.Colors.cardBackgroundElevated
+      return theme.colors.cardBackgroundElevated
     case .outlined:
-      return Color(.systemBackground)
+      return theme.colors.background
     case .selected:
-      return DSTheme.Colors.cardBackgroundSelected
+      return theme.colors.cardBackgroundSelected
     case .interactive:
-      return DSTheme.Colors.cardBackground
+      return theme.colors.cardBackground
     }
   }
 
-  public var borderColor: Color? {
+  public func borderColor(in theme: DSTheme) -> Color? {
     switch self {
     case .outlined:
-      return DSTheme.Colors.border
+      return theme.colors.border
     case .selected:
-      return DSTheme.Colors.borderSelected
+      return theme.colors.borderSelected
     default:
       return nil
     }
@@ -53,13 +53,76 @@ public enum DSCardStyle {
     }
   }
 
-  public var shadow: ShadowStyle? {
+  public func shadow(in theme: DSTheme) -> ShadowStyle? {
     switch self {
     case .elevated:
-      return DSTheme.Shadows.sm
+      return theme.shadows.sm
     default:
       return nil
     }
+  }
+}
+
+// MARK: - Card Style
+
+/// The look of `DSCard` and `.dsCard()`. Set it with `.dsCardStyle(_:)`.
+public protocol DSCardStyle: Sendable {
+  typealias Configuration = DSCardStyleConfiguration
+  associatedtype Body: View
+
+  @MainActor @ViewBuilder func makeBody(configuration: Configuration) -> Body
+}
+
+/// What a card style draws.
+public struct DSCardStyleConfiguration {
+  /// The card's contents, which the style wraps.
+  public let content: AnyView
+  public let variant: DSCardVariant
+  public let padding: CGFloat
+  public let cornerRadius: CGFloat
+  public let theme: DSTheme
+}
+
+/// The look every card had before styles existed.
+public struct DefaultDSCardStyle: DSCardStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    let theme = configuration.theme
+    let variant = configuration.variant
+
+    configuration.content
+      .padding(configuration.padding)
+      .background(variant.backgroundColor(in: theme))
+      .cornerRadius(configuration.cornerRadius)
+      .overlay(
+        RoundedRectangle(cornerRadius: configuration.cornerRadius)
+          .stroke(variant.borderColor(in: theme) ?? .clear, lineWidth: variant.borderWidth)
+      )
+      .ifLet(variant.shadow(in: theme)) { view, shadow in
+        view.dsShadow(shadow)
+      }
+  }
+}
+
+extension DSCardStyle where Self == DefaultDSCardStyle {
+  public static var `default`: DefaultDSCardStyle { DefaultDSCardStyle() }
+}
+
+extension AnyDSStyle where Configuration == DSCardStyleConfiguration {
+  init(_ style: some DSCardStyle) {
+    self.init { AnyView(style.makeBody(configuration: $0)) }
+  }
+}
+
+extension EnvironmentValues {
+  @Entry var dsCardStyle = AnyDSStyle(DefaultDSCardStyle())
+}
+
+extension View {
+  /// Set the style of every `DSCard` and `.dsCard()` inside this view.
+  public func dsCardStyle(_ style: some DSCardStyle) -> some View {
+    environment(\.dsCardStyle, AnyDSStyle(style))
   }
 }
 
@@ -85,20 +148,24 @@ public enum DSCardStyle {
 /// }
 /// ```
 public struct DSCard<Content: View>: View {
-  let style: DSCardStyle
-  let padding: CGFloat
-  let cornerRadius: CGFloat
+  let variant: DSCardVariant
+  let padding: CGFloat?
+  let cornerRadius: CGFloat?
   let action: (() -> Void)?
   @ViewBuilder let content: () -> Content
 
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsCardStyle) private var cardStyle
+
+  /// `padding` and `cornerRadius` default to the theme's `spacing.lg` and `radius.md`.
   public init(
-    style: DSCardStyle = .standard,
-    padding: CGFloat = DSTheme.Spacing.lg,
-    cornerRadius: CGFloat = DSTheme.Radius.md,
+    style: DSCardVariant = .standard,
+    padding: CGFloat? = nil,
+    cornerRadius: CGFloat? = nil,
     action: (() -> Void)? = nil,
     @ViewBuilder content: @escaping () -> Content
   ) {
-    self.style = style
+    self.variant = style
     self.padding = padding
     self.cornerRadius = cornerRadius
     self.action = action
@@ -119,46 +186,46 @@ public struct DSCard<Content: View>: View {
   }
 
   private var cardContent: some View {
-    content()
-      .padding(padding)
-      .background(style.backgroundColor)
-      .cornerRadius(cornerRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: cornerRadius)
-          .stroke(style.borderColor ?? .clear, lineWidth: style.borderWidth)
+    cardStyle.makeBody(
+      DSCardStyleConfiguration(
+        content: AnyView(content()),
+        variant: variant,
+        padding: padding ?? theme.spacing.lg,
+        cornerRadius: cornerRadius ?? theme.radius.md,
+        theme: theme
       )
-      .ifLet(style.shadow) { view, shadow in
-        view.dsShadow(shadow)
-      }
-      .contentShape(Rectangle())
+    )
+    .contentShape(Rectangle())
   }
 }
 
 // MARK: - View Modifier
 
 public struct DSCardModifier: ViewModifier {
-  let style: DSCardStyle
-  let padding: CGFloat
-  let cornerRadius: CGFloat
+  let variant: DSCardVariant
+  let padding: CGFloat?
+  let cornerRadius: CGFloat?
 
-  public init(style: DSCardStyle, padding: CGFloat, cornerRadius: CGFloat) {
-    self.style = style
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsCardStyle) private var cardStyle
+
+  /// `padding` and `cornerRadius` default to the theme's `spacing.lg` and `radius.md`.
+  public init(style: DSCardVariant, padding: CGFloat? = nil, cornerRadius: CGFloat? = nil) {
+    self.variant = style
     self.padding = padding
     self.cornerRadius = cornerRadius
   }
 
   public func body(content: Content) -> some View {
-    content
-      .padding(padding)
-      .background(style.backgroundColor)
-      .cornerRadius(cornerRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: cornerRadius)
-          .stroke(style.borderColor ?? .clear, lineWidth: style.borderWidth)
+    cardStyle.makeBody(
+      DSCardStyleConfiguration(
+        content: AnyView(content),
+        variant: variant,
+        padding: padding ?? theme.spacing.lg,
+        cornerRadius: cornerRadius ?? theme.radius.md,
+        theme: theme
       )
-      .ifLet(style.shadow) { view, shadow in
-        view.dsShadow(shadow)
-      }
+    )
   }
 }
 
@@ -179,9 +246,9 @@ extension View {
   /// .dsCard(style: .elevated)
   /// ```
   public func dsCard(
-    style: DSCardStyle = .standard,
-    padding: CGFloat = DSTheme.Spacing.lg,
-    cornerRadius: CGFloat = DSTheme.Radius.md
+    style: DSCardVariant = .standard,
+    padding: CGFloat? = nil,
+    cornerRadius: CGFloat? = nil
   ) -> some View {
     self.modifier(DSCardModifier(style: style, padding: padding, cornerRadius: cornerRadius))
   }
@@ -205,7 +272,7 @@ extension View {
 
 #Preview("Card Styles") {
   ScrollView {
-    VStack(spacing: DSTheme.Spacing.lg) {
+    VStack(spacing: DSTheme.default.spacing.lg) {
       DSCard {
         HStack {
           Text("Standard Card")

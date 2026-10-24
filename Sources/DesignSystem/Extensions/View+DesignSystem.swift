@@ -7,6 +7,27 @@
 
 import SwiftUI
 
+// MARK: - Theme Access
+
+/// Applies a transform that needs the current theme, for modifiers that have no view of their own
+/// to hold an `@Environment` property.
+private struct ThemedModifier<Result: View>: ViewModifier {
+  @Environment(\.dsTheme) private var theme
+  let transform: (AnyView, DSTheme) -> Result
+
+  func body(content: Content) -> some View {
+    transform(AnyView(content), theme)
+  }
+}
+
+extension View {
+  fileprivate func themed<Result: View>(
+    _ transform: @escaping (AnyView, DSTheme) -> Result
+  ) -> some View {
+    modifier(ThemedModifier(transform: transform))
+  }
+}
+
 // MARK: - Conditional Modifiers
 
 extension View {
@@ -40,15 +61,18 @@ extension View {
 extension View {
   /// Add a loading overlay to any view.
   public func dsLoading(_ isLoading: Bool, message: String? = nil) -> some View {
-    self.overlay {
-      if isLoading {
-        ZStack {
-          Color(.systemBackground).opacity(0.8)
-          DSLoadingView(message)
+    themed { content, theme in
+      content
+        .overlay {
+          if isLoading {
+            ZStack {
+              theme.colors.background.opacity(0.8)
+              DSLoadingView(message)
+            }
+          }
         }
-      }
+        .disabled(isLoading)
     }
-    .disabled(isLoading)
   }
 }
 
@@ -57,24 +81,28 @@ extension View {
 extension View {
   /// Apply primary action styling.
   public func dsPrimaryStyle() -> some View {
-    self
-      .font(DSTheme.Typography.button)
-      .foregroundColor(DSTheme.Colors.textOnPrimary)
-      .padding(.vertical, DSTheme.Spacing.md)
-      .padding(.horizontal, DSTheme.Spacing.lg)
-      .background(DSTheme.Colors.primary)
-      .cornerRadius(DSTheme.Radius.md)
+    themed { content, theme in
+      content
+        .font(theme.typography.button)
+        .foregroundColor(theme.colors.textOnPrimary)
+        .padding(.vertical, theme.spacing.md)
+        .padding(.horizontal, theme.spacing.lg)
+        .background(theme.colors.primary)
+        .cornerRadius(theme.radius.md)
+    }
   }
 
   /// Apply secondary styling.
   public func dsSecondaryStyle() -> some View {
-    self
-      .font(DSTheme.Typography.button)
-      .foregroundColor(DSTheme.Colors.primary)
-      .padding(.vertical, DSTheme.Spacing.md)
-      .padding(.horizontal, DSTheme.Spacing.lg)
-      .background(DSTheme.Colors.primary.opacity(0.1))
-      .cornerRadius(DSTheme.Radius.md)
+    themed { content, theme in
+      content
+        .font(theme.typography.button)
+        .foregroundColor(theme.colors.primary)
+        .padding(.vertical, theme.spacing.md)
+        .padding(.horizontal, theme.spacing.lg)
+        .background(theme.colors.primary.opacity(0.1))
+        .cornerRadius(theme.radius.md)
+    }
   }
 }
 
@@ -92,23 +120,26 @@ extension View {
 extension View {
   /// Apply standard screen padding.
   public func dsScreenPadding() -> some View {
-    self.padding(DSTheme.Spacing.lg)
+    themed { content, theme in content.padding(theme.spacing.lg) }
   }
 
   /// Apply standard section spacing.
   public func dsSectionSpacing() -> some View {
-    self.padding(.vertical, DSTheme.Spacing.xl)
+    themed { content, theme in content.padding(.vertical, theme.spacing.xl) }
   }
 }
 
 // MARK: - Divider with Spacing
 
 extension View {
-  /// Add a divider below the view with standard spacing.
-  public func dsDivided(spacing: CGFloat = DSTheme.Spacing.md) -> some View {
-    VStack(spacing: spacing) {
-      self
-      Divider()
+  /// Add a divider below the view with standard spacing. `spacing` defaults to the theme's
+  /// `spacing.md`.
+  public func dsDivided(spacing: CGFloat? = nil) -> some View {
+    themed { content, theme in
+      VStack(spacing: spacing ?? theme.spacing.md) {
+        content
+        Divider()
+      }
     }
   }
 }
@@ -141,10 +172,12 @@ extension View {
 extension View {
   /// Apply error border when there's an error.
   public func dsErrorBorder(_ hasError: Bool) -> some View {
-    self.overlay(
-      RoundedRectangle(cornerRadius: DSTheme.Radius.sm)
-        .stroke(hasError ? DSTheme.Colors.error : .clear, lineWidth: 1)
-    )
+    themed { content, theme in
+      content.overlay(
+        RoundedRectangle(cornerRadius: theme.radius.sm)
+          .stroke(hasError ? theme.colors.error : .clear, lineWidth: 1)
+      )
+    }
   }
 }
 

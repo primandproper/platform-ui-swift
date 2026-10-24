@@ -9,7 +9,7 @@ import SwiftUI
 
 // MARK: - Status Type
 
-public enum DSStatusType {
+public enum DSStatusType: Sendable {
   case pending
   case accepted
   case rejected
@@ -43,20 +43,20 @@ public enum DSStatusType {
     }
   }
 
-  public var color: Color {
+  public func color(in theme: DSTheme) -> Color {
     switch self {
     case .pending:
-      return DSTheme.Colors.statusPending
+      return theme.colors.statusPending
     case .accepted, .success:
-      return DSTheme.Colors.statusAccepted
+      return theme.colors.statusAccepted
     case .rejected, .error:
-      return DSTheme.Colors.statusRejected
+      return theme.colors.statusRejected
     case .cancelled:
-      return DSTheme.Colors.statusCancelled
+      return theme.colors.statusCancelled
     case .warning:
-      return DSTheme.Colors.warning
+      return theme.colors.warning
     case .info:
-      return DSTheme.Colors.info
+      return theme.colors.info
     case .custom(_, let color):
       return color
     }
@@ -87,9 +87,9 @@ public enum DSStatusType {
   }
 }
 
-// MARK: - Badge Style
+// MARK: - Badge Variant
 
-public enum DSBadgeStyle {
+public enum DSBadgeVariant: Sendable {
   case dot  // Colored dot + text
   case pill  // Colored background pill
   case outline  // Outlined pill
@@ -98,7 +98,7 @@ public enum DSBadgeStyle {
 
 // MARK: - Badge Size
 
-public enum DSBadgeSize {
+public enum DSBadgeSize: Sendable {
   case small
   case medium
   case large
@@ -114,41 +114,127 @@ public enum DSBadgeSize {
     }
   }
 
-  public var font: Font {
+  public func font(in theme: DSTheme) -> Font {
     switch self {
     case .small:
-      return DSTheme.Typography.captionSmall
+      return theme.typography.captionSmall
     case .medium:
-      return DSTheme.Typography.caption
+      return theme.typography.caption
     case .large:
-      return DSTheme.Typography.labelSmall
+      return theme.typography.labelSmall
     }
   }
 
-  public var padding: EdgeInsets {
+  public func padding(in theme: DSTheme) -> EdgeInsets {
+    let spacing = theme.spacing
     switch self {
     case .small:
       return EdgeInsets(
-        top: DSTheme.Spacing.xxs,
-        leading: DSTheme.Spacing.sm,
-        bottom: DSTheme.Spacing.xxs,
-        trailing: DSTheme.Spacing.sm
-      )
+        top: spacing.xxs, leading: spacing.sm, bottom: spacing.xxs, trailing: spacing.sm)
     case .medium:
       return EdgeInsets(
-        top: DSTheme.Spacing.xs,
-        leading: DSTheme.Spacing.sm,
-        bottom: DSTheme.Spacing.xs,
-        trailing: DSTheme.Spacing.sm
-      )
+        top: spacing.xs, leading: spacing.sm, bottom: spacing.xs, trailing: spacing.sm)
     case .large:
       return EdgeInsets(
-        top: DSTheme.Spacing.sm,
-        leading: DSTheme.Spacing.md,
-        bottom: DSTheme.Spacing.sm,
-        trailing: DSTheme.Spacing.md
-      )
+        top: spacing.sm, leading: spacing.md, bottom: spacing.sm, trailing: spacing.md)
     }
+  }
+}
+
+// MARK: - Status Badge Style
+
+/// The look of `DSStatusBadge` and `DSStatusDot`. Set it with `.dsStatusBadgeStyle(_:)`.
+public protocol DSStatusBadgeStyle: Sendable {
+  typealias Configuration = DSStatusBadgeStyleConfiguration
+  associatedtype Body: View
+
+  @MainActor @ViewBuilder func makeBody(configuration: Configuration) -> Body
+}
+
+/// What a status badge style draws.
+public struct DSStatusBadgeStyleConfiguration {
+  public let status: DSStatusType
+  /// The text to show; nil for a `DSStatusDot`, which shows none.
+  public let label: String?
+  /// The status's color in the current theme.
+  public let color: Color
+  public let variant: DSBadgeVariant
+  public let size: DSBadgeSize
+  public let theme: DSTheme
+}
+
+/// The look every status badge had before styles existed.
+public struct DefaultDSStatusBadgeStyle: DSStatusBadgeStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    let theme = configuration.theme
+    let size = configuration.size
+    let color = configuration.color
+
+    if let label = configuration.label {
+      switch configuration.variant {
+      case .dot:
+        HStack(spacing: theme.spacing.sm) {
+          dot(configuration)
+
+          Text(label)
+            .font(size.font(in: theme))
+            .foregroundColor(theme.colors.textSecondary)
+        }
+      case .pill:
+        Text(label)
+          .font(size.font(in: theme))
+          .foregroundColor(.white)
+          .padding(size.padding(in: theme))
+          .background(color)
+          .cornerRadius(theme.radius.full)
+      case .outline:
+        Text(label)
+          .font(size.font(in: theme))
+          .foregroundColor(color)
+          .padding(size.padding(in: theme))
+          .background(color.opacity(0.1))
+          .cornerRadius(theme.radius.full)
+          .overlay(
+            RoundedRectangle(cornerRadius: theme.radius.full)
+              .stroke(color, lineWidth: 1)
+          )
+      case .minimal:
+        Text(label)
+          .font(size.font(in: theme))
+          .foregroundColor(color)
+      }
+    } else {
+      dot(configuration)
+    }
+  }
+
+  private func dot(_ configuration: Configuration) -> some View {
+    Circle()
+      .fill(configuration.color)
+      .frame(width: configuration.size.dotSize, height: configuration.size.dotSize)
+  }
+}
+
+extension DSStatusBadgeStyle where Self == DefaultDSStatusBadgeStyle {
+  public static var `default`: DefaultDSStatusBadgeStyle { DefaultDSStatusBadgeStyle() }
+}
+
+extension AnyDSStyle where Configuration == DSStatusBadgeStyleConfiguration {
+  init(_ style: some DSStatusBadgeStyle) {
+    self.init { AnyView(style.makeBody(configuration: $0)) }
+  }
+}
+
+extension EnvironmentValues {
+  @Entry var dsStatusBadgeStyle = AnyDSStyle(DefaultDSStatusBadgeStyle())
+}
+
+extension View {
+  /// Set the style of every `DSStatusBadge` and `DSStatusDot` inside this view.
+  public func dsStatusBadgeStyle(_ style: some DSStatusBadgeStyle) -> some View {
+    environment(\.dsStatusBadgeStyle, AnyDSStyle(style))
   }
 }
 
@@ -167,83 +253,44 @@ public enum DSBadgeSize {
 /// ```
 public struct DSStatusBadge: View {
   let status: DSStatusType
-  let style: DSBadgeStyle
+  let variant: DSBadgeVariant
   let size: DSBadgeSize
+
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsStatusBadgeStyle) private var statusBadgeStyle
 
   public init(
     _ status: DSStatusType,
-    style: DSBadgeStyle = .dot,
+    style: DSBadgeVariant = .dot,
     size: DSBadgeSize = .medium
   ) {
     self.status = status
-    self.style = style
+    self.variant = style
     self.size = size
   }
 
   /// Convenience initializer for raw string status values
   public init(
     status: String,
-    style: DSBadgeStyle = .dot,
+    style: DSBadgeVariant = .dot,
     size: DSBadgeSize = .medium
   ) {
     self.status = DSStatusType.from(status)
-    self.style = style
+    self.variant = style
     self.size = size
   }
 
   public var body: some View {
-    Group {
-      switch style {
-      case .dot:
-        dotBadge
-      case .pill:
-        pillBadge
-      case .outline:
-        outlineBadge
-      case .minimal:
-        minimalBadge
-      }
-    }
-  }
-
-  private var dotBadge: some View {
-    HStack(spacing: DSTheme.Spacing.sm) {
-      Circle()
-        .fill(status.color)
-        .frame(width: size.dotSize, height: size.dotSize)
-
-      Text(status.label)
-        .font(size.font)
-        .foregroundColor(DSTheme.Colors.textSecondary)
-    }
-  }
-
-  private var pillBadge: some View {
-    Text(status.label)
-      .font(size.font)
-      .foregroundColor(.white)
-      .padding(size.padding)
-      .background(status.color)
-      .cornerRadius(DSTheme.Radius.full)
-  }
-
-  private var outlineBadge: some View {
-    Text(status.label)
-      .font(size.font)
-      .foregroundColor(status.color)
-      .padding(size.padding)
-      .background(status.color.opacity(0.1))
-      .cornerRadius(DSTheme.Radius.full)
-      .overlay(
-        RoundedRectangle(cornerRadius: DSTheme.Radius.full)
-          .stroke(status.color, lineWidth: 1)
+    statusBadgeStyle.makeBody(
+      DSStatusBadgeStyleConfiguration(
+        status: status,
+        label: status.label,
+        color: status.color(in: theme),
+        variant: variant,
+        size: size,
+        theme: theme
       )
-  }
-
-  private var minimalBadge: some View {
-    Text(status.label)
-      .font(size.font)
-      .foregroundColor(status.color)
+    )
   }
 }
 
@@ -260,6 +307,9 @@ public struct DSStatusDot: View {
   let status: DSStatusType
   let size: DSBadgeSize
 
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsStatusBadgeStyle) private var statusBadgeStyle
+
   public init(_ status: DSStatusType, size: DSBadgeSize = .medium) {
     self.status = status
     self.size = size
@@ -271,9 +321,16 @@ public struct DSStatusDot: View {
   }
 
   public var body: some View {
-    Circle()
-      .fill(status.color)
-      .frame(width: size.dotSize, height: size.dotSize)
+    statusBadgeStyle.makeBody(
+      DSStatusBadgeStyleConfiguration(
+        status: status,
+        label: nil,
+        color: status.color(in: theme),
+        variant: .dot,
+        size: size,
+        theme: theme
+      )
+    )
   }
 }
 
@@ -281,10 +338,10 @@ public struct DSStatusDot: View {
 
 #Preview("Status Badges") {
   ScrollView {
-    VStack(spacing: DSTheme.Spacing.xl) {
+    VStack(spacing: DSTheme.default.spacing.xl) {
       Group {
         Text("Dot Style (default)").font(.caption).foregroundColor(.secondary)
-        HStack(spacing: DSTheme.Spacing.lg) {
+        HStack(spacing: DSTheme.default.spacing.lg) {
           DSStatusBadge(.pending)
           DSStatusBadge(.accepted)
           DSStatusBadge(.rejected)
@@ -294,7 +351,7 @@ public struct DSStatusDot: View {
 
       Group {
         Text("Pill Style").font(.caption).foregroundColor(.secondary)
-        HStack(spacing: DSTheme.Spacing.sm) {
+        HStack(spacing: DSTheme.default.spacing.sm) {
           DSStatusBadge(.pending, style: .pill)
           DSStatusBadge(.accepted, style: .pill)
           DSStatusBadge(.rejected, style: .pill)
@@ -303,7 +360,7 @@ public struct DSStatusDot: View {
 
       Group {
         Text("Outline Style").font(.caption).foregroundColor(.secondary)
-        HStack(spacing: DSTheme.Spacing.sm) {
+        HStack(spacing: DSTheme.default.spacing.sm) {
           DSStatusBadge(.pending, style: .outline)
           DSStatusBadge(.accepted, style: .outline)
           DSStatusBadge(.rejected, style: .outline)
@@ -312,7 +369,7 @@ public struct DSStatusDot: View {
 
       Group {
         Text("Minimal Style").font(.caption).foregroundColor(.secondary)
-        HStack(spacing: DSTheme.Spacing.lg) {
+        HStack(spacing: DSTheme.default.spacing.lg) {
           DSStatusBadge(.pending, style: .minimal)
           DSStatusBadge(.accepted, style: .minimal)
           DSStatusBadge(.rejected, style: .minimal)
@@ -323,7 +380,7 @@ public struct DSStatusDot: View {
 
       Group {
         Text("Sizes").font(.caption).foregroundColor(.secondary)
-        VStack(spacing: DSTheme.Spacing.md) {
+        VStack(spacing: DSTheme.default.spacing.md) {
           DSStatusBadge(.pending, style: .pill, size: .small)
           DSStatusBadge(.pending, style: .pill, size: .medium)
           DSStatusBadge(.pending, style: .pill, size: .large)
@@ -334,7 +391,7 @@ public struct DSStatusDot: View {
 
       Group {
         Text("From Raw String").font(.caption).foregroundColor(.secondary)
-        VStack(spacing: DSTheme.Spacing.sm) {
+        VStack(spacing: DSTheme.default.spacing.sm) {
           DSStatusBadge(status: "pending")
           DSStatusBadge(status: "ACCEPTED")
           DSStatusBadge(status: "cancelled")
@@ -346,7 +403,7 @@ public struct DSStatusDot: View {
 
       Group {
         Text("Custom").font(.caption).foregroundColor(.secondary)
-        HStack(spacing: DSTheme.Spacing.sm) {
+        HStack(spacing: DSTheme.default.spacing.sm) {
           DSStatusBadge(.custom("Active", .purple), style: .pill)
           DSStatusBadge(.custom("Draft", .cyan), style: .outline)
           DSStatusBadge(.info)
@@ -358,7 +415,7 @@ public struct DSStatusDot: View {
 
       Group {
         Text("Status Dots Only").font(.caption).foregroundColor(.secondary)
-        HStack(spacing: DSTheme.Spacing.lg) {
+        HStack(spacing: DSTheme.default.spacing.lg) {
           DSStatusDot(.pending)
           DSStatusDot(.accepted)
           DSStatusDot(.rejected)

@@ -9,51 +9,133 @@ import SwiftUI
 
 // MARK: - Empty State Size
 
-public enum DSEmptyStateSize {
+public enum DSEmptyStateSize: Sendable {
   case compact
   case standard
   case large
 
-  public var iconSize: CGFloat {
+  public func iconSize(in theme: DSTheme) -> CGFloat {
     switch self {
     case .compact:
-      return DSTheme.IconSize.xl
+      return theme.iconSize.xl
     case .standard:
-      return DSTheme.IconSize.xxl
+      return theme.iconSize.xxl
     case .large:
       return 64
     }
   }
 
-  public var titleFont: Font {
+  public func titleFont(in theme: DSTheme) -> Font {
     switch self {
     case .compact:
-      return DSTheme.Typography.label
+      return theme.typography.label
     case .standard:
-      return DSTheme.Typography.title3
+      return theme.typography.title3
     case .large:
-      return DSTheme.Typography.title2
+      return theme.typography.title2
     }
   }
 
-  public var messageFont: Font {
+  public func messageFont(in theme: DSTheme) -> Font {
     switch self {
     case .compact:
-      return DSTheme.Typography.caption
+      return theme.typography.caption
     case .standard, .large:
-      return DSTheme.Typography.body
+      return theme.typography.body
     }
   }
 
-  public var spacing: CGFloat {
+  public func spacing(in theme: DSTheme) -> CGFloat {
     switch self {
     case .compact:
-      return DSTheme.Spacing.sm
+      return theme.spacing.sm
     case .standard:
-      return DSTheme.Spacing.md
+      return theme.spacing.md
     case .large:
-      return DSTheme.Spacing.lg
+      return theme.spacing.lg
     }
+  }
+}
+
+// MARK: - Empty State Style
+
+/// The look of `DSEmptyState`. Set it with `.dsEmptyStateStyle(_:)`.
+public protocol DSEmptyStateStyle: Sendable {
+  typealias Configuration = DSEmptyStateStyleConfiguration
+  associatedtype Body: View
+
+  @MainActor @ViewBuilder func makeBody(configuration: Configuration) -> Body
+}
+
+/// What an empty state style draws.
+public struct DSEmptyStateStyleConfiguration {
+  /// An SF Symbol name.
+  public let icon: String?
+  public let title: String?
+  public let message: String
+  public let size: DSEmptyStateSize
+  /// The call to action, present only when the caller gave both a title and an action.
+  public let actionTitle: String?
+  public let action: (() -> Void)?
+  public let theme: DSTheme
+}
+
+/// The look every empty state had before styles existed.
+public struct DefaultDSEmptyStateStyle: DSEmptyStateStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    let theme = configuration.theme
+    let size = configuration.size
+
+    VStack(spacing: size.spacing(in: theme)) {
+      if let icon = configuration.icon {
+        Image(systemName: icon)
+          .font(.system(size: size.iconSize(in: theme)))
+          .foregroundColor(theme.colors.textTertiary)
+      }
+
+      VStack(spacing: theme.spacing.xs) {
+        if let title = configuration.title {
+          Text(title)
+            .font(size.titleFont(in: theme))
+            .foregroundColor(theme.colors.textPrimary)
+        }
+
+        Text(configuration.message)
+          .font(size.messageFont(in: theme))
+          .foregroundColor(theme.colors.textSecondary)
+          .multilineTextAlignment(.center)
+      }
+
+      if let actionTitle = configuration.actionTitle, let action = configuration.action {
+        DSButton(actionTitle, style: .primary, size: .small, action: action)
+          .padding(.top, theme.spacing.sm)
+      }
+    }
+    .padding(size == .compact ? theme.spacing.md : theme.spacing.xl)
+    .frame(maxWidth: size == .compact ? nil : .infinity)
+  }
+}
+
+extension DSEmptyStateStyle where Self == DefaultDSEmptyStateStyle {
+  public static var `default`: DefaultDSEmptyStateStyle { DefaultDSEmptyStateStyle() }
+}
+
+extension AnyDSStyle where Configuration == DSEmptyStateStyleConfiguration {
+  init(_ style: some DSEmptyStateStyle) {
+    self.init { AnyView(style.makeBody(configuration: $0)) }
+  }
+}
+
+extension EnvironmentValues {
+  @Entry var dsEmptyStateStyle = AnyDSStyle(DefaultDSEmptyStateStyle())
+}
+
+extension View {
+  /// Set the style of every `DSEmptyState` inside this view.
+  public func dsEmptyStateStyle(_ style: some DSEmptyStateStyle) -> some View {
+    environment(\.dsEmptyStateStyle, AnyDSStyle(style))
   }
 }
 
@@ -92,6 +174,9 @@ public struct DSEmptyState: View {
   let size: DSEmptyStateSize
   let action: (() -> Void)?
 
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsEmptyStateStyle) private var emptyStateStyle
+
   public init(
     icon: String? = nil,
     title: String? = nil,
@@ -109,33 +194,19 @@ public struct DSEmptyState: View {
   }
 
   public var body: some View {
-    VStack(spacing: size.spacing) {
-      if let icon = icon {
-        Image(systemName: icon)
-          .font(.system(size: size.iconSize))
-          .foregroundColor(DSTheme.Colors.textTertiary)
-      }
+    let hasAction = actionTitle != nil && action != nil
 
-      VStack(spacing: DSTheme.Spacing.xs) {
-        if let title = title {
-          Text(title)
-            .font(size.titleFont)
-            .foregroundColor(DSTheme.Colors.textPrimary)
-        }
-
-        Text(message)
-          .font(size.messageFont)
-          .foregroundColor(DSTheme.Colors.textSecondary)
-          .multilineTextAlignment(.center)
-      }
-
-      if let actionTitle = actionTitle, let action = action {
-        DSButton(actionTitle, style: .primary, size: .small, action: action)
-          .padding(.top, DSTheme.Spacing.sm)
-      }
-    }
-    .padding(size == .compact ? DSTheme.Spacing.md : DSTheme.Spacing.xl)
-    .frame(maxWidth: size == .compact ? nil : .infinity)
+    emptyStateStyle.makeBody(
+      DSEmptyStateStyleConfiguration(
+        icon: icon,
+        title: title,
+        message: message,
+        size: size,
+        actionTitle: hasAction ? actionTitle : nil,
+        action: hasAction ? action : nil,
+        theme: theme
+      )
+    )
   }
 }
 
@@ -143,7 +214,7 @@ public struct DSEmptyState: View {
 
 #Preview("Empty States") {
   ScrollView {
-    VStack(spacing: DSTheme.Spacing.xxl) {
+    VStack(spacing: DSTheme.default.spacing.xxl) {
       DSEmptyState(
         icon: "tray",
         title: "No Items",

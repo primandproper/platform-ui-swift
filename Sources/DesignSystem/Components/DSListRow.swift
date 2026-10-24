@@ -7,12 +7,127 @@
 
 import SwiftUI
 
-// MARK: - List Row Style
+// MARK: - List Row Variant
 
-public enum DSListRowStyle {
+public enum DSListRowVariant: Sendable {
   case standard
   case card
   case plain
+}
+
+// MARK: - List Row Style
+
+/// The look of `DSListRow` and `DSListRowLink`. Set it with `.dsListRowStyle(_:)`.
+public protocol DSListRowStyle: Sendable {
+  typealias Configuration = DSListRowStyleConfiguration
+  associatedtype Body: View
+
+  @MainActor @ViewBuilder func makeBody(configuration: Configuration) -> Body
+}
+
+/// What a list row style draws.
+public struct DSListRowStyleConfiguration {
+  public let title: String
+  public let subtitle: String?
+  /// An SF Symbol name.
+  public let icon: String?
+  public let iconColor: Color
+  public let variant: DSListRowVariant
+  public let showChevron: Bool
+  /// Whatever the caller put at the trailing edge; nil when it put nothing.
+  public let trailing: AnyView?
+  public let theme: DSTheme
+}
+
+/// The look every list row had before styles existed.
+public struct DefaultDSListRowStyle: DSListRowStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    let theme = configuration.theme
+
+    HStack(spacing: theme.spacing.md) {
+      // Leading icon
+      if let icon = configuration.icon {
+        Image(systemName: icon)
+          .font(.system(size: theme.iconSize.md))
+          .foregroundColor(configuration.iconColor)
+          .frame(width: theme.iconSize.lg)
+      }
+
+      // Title and subtitle
+      VStack(alignment: .leading, spacing: theme.spacing.xxs) {
+        Text(configuration.title)
+          .font(theme.typography.label)
+          .foregroundColor(theme.colors.textPrimary)
+
+        if let subtitle = configuration.subtitle {
+          Text(subtitle)
+            .font(theme.typography.caption)
+            .foregroundColor(theme.colors.textSecondary)
+        }
+      }
+
+      Spacer()
+
+      // Trailing content
+      if let trailing = configuration.trailing {
+        trailing
+      }
+
+      // Chevron
+      if configuration.showChevron {
+        Image(systemName: "chevron.right")
+          .font(.system(size: theme.iconSize.sm))
+          .foregroundColor(theme.colors.textTertiary)
+      }
+    }
+    .contentShape(Rectangle())
+    .modifier(VariantPadding(variant: configuration.variant, theme: theme))
+  }
+
+  private struct VariantPadding: ViewModifier {
+    let variant: DSListRowVariant
+    let theme: DSTheme
+
+    func body(content: Content) -> some View {
+      switch variant {
+      case .standard:
+        content
+          .padding(.vertical, theme.spacing.md)
+          .padding(.horizontal, theme.spacing.sm)
+      case .card:
+        content
+          .padding(theme.spacing.lg)
+          .background(theme.colors.cardBackground)
+          .cornerRadius(theme.radius.md)
+      case .plain:
+        content
+          .padding(.vertical, theme.spacing.sm)
+      }
+    }
+  }
+}
+
+extension DSListRowStyle where Self == DefaultDSListRowStyle {
+  public static var `default`: DefaultDSListRowStyle { DefaultDSListRowStyle() }
+}
+
+extension AnyDSStyle where Configuration == DSListRowStyleConfiguration {
+  init(_ style: some DSListRowStyle) {
+    self.init { AnyView(style.makeBody(configuration: $0)) }
+  }
+}
+
+extension EnvironmentValues {
+  @Entry var dsListRowStyle = AnyDSStyle(DefaultDSListRowStyle())
+}
+
+extension View {
+  /// Set the style of every `DSListRow` and `DSListRowLink` inside this view.
+  public func dsListRowStyle(_ style: some DSListRowStyle) -> some View {
+    environment(\.dsListRowStyle, AnyDSStyle(style))
+  }
 }
 
 // MARK: - DSListRow Component
@@ -38,18 +153,22 @@ public struct DSListRow<Trailing: View>: View {
   let title: String
   let subtitle: String?
   let icon: String?
-  let iconColor: Color
-  let style: DSListRowStyle
+  let iconColor: Color?
+  let variant: DSListRowVariant
   let showChevron: Bool
   let trailing: (() -> Trailing)?
   let action: (() -> Void)?
 
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsListRowStyle) private var listRowStyle
+
+  /// `iconColor` defaults to the theme's `colors.textSecondary`.
   public init(
     title: String,
     subtitle: String? = nil,
     icon: String? = nil,
-    iconColor: Color = DSTheme.Colors.textSecondary,
-    style: DSListRowStyle = .standard,
+    iconColor: Color? = nil,
+    style: DSListRowVariant = .standard,
     showChevron: Bool = false,
     action: (() -> Void)? = nil,
     @ViewBuilder trailing: @escaping () -> Trailing
@@ -58,7 +177,7 @@ public struct DSListRow<Trailing: View>: View {
     self.subtitle = subtitle
     self.icon = icon
     self.iconColor = iconColor
-    self.style = style
+    self.variant = style
     self.showChevron = showChevron
     self.trailing = trailing
     self.action = action
@@ -75,59 +194,34 @@ public struct DSListRow<Trailing: View>: View {
         rowContent
       }
     }
-    .applyStyle(style)
   }
 
   private var rowContent: some View {
-    HStack(spacing: DSTheme.Spacing.md) {
-      // Leading icon
-      if let icon = icon {
-        Image(systemName: icon)
-          .font(.system(size: DSTheme.IconSize.md))
-          .foregroundColor(iconColor)
-          .frame(width: DSTheme.IconSize.lg)
-      }
-
-      // Title and subtitle
-      VStack(alignment: .leading, spacing: DSTheme.Spacing.xxs) {
-        Text(title)
-          .font(DSTheme.Typography.label)
-          .foregroundColor(DSTheme.Colors.textPrimary)
-
-        if let subtitle = subtitle {
-          Text(subtitle)
-            .font(DSTheme.Typography.caption)
-            .foregroundColor(DSTheme.Colors.textSecondary)
-        }
-      }
-
-      Spacer()
-
-      // Trailing content
-      if let trailing = trailing {
-        trailing()
-      }
-
-      // Chevron
-      if showChevron {
-        Image(systemName: "chevron.right")
-          .font(.system(size: DSTheme.IconSize.sm))
-          .foregroundColor(DSTheme.Colors.textTertiary)
-      }
-    }
-    .contentShape(Rectangle())
+    listRowStyle.makeBody(
+      DSListRowStyleConfiguration(
+        title: title,
+        subtitle: subtitle,
+        icon: icon,
+        iconColor: iconColor ?? theme.colors.textSecondary,
+        variant: variant,
+        showChevron: showChevron,
+        trailing: trailing.map { AnyView($0()) },
+        theme: theme
+      )
+    )
   }
 }
 
 // MARK: - Convenience initializer without trailing
 
 extension DSListRow where Trailing == EmptyView {
+  /// `iconColor` defaults to the theme's `colors.textSecondary`.
   public init(
     title: String,
     subtitle: String? = nil,
     icon: String? = nil,
-    iconColor: Color = DSTheme.Colors.textSecondary,
-    style: DSListRowStyle = .standard,
+    iconColor: Color? = nil,
+    style: DSListRowVariant = .standard,
     showChevron: Bool = false,
     action: (() -> Void)? = nil
   ) {
@@ -135,7 +229,7 @@ extension DSListRow where Trailing == EmptyView {
     self.subtitle = subtitle
     self.icon = icon
     self.iconColor = iconColor
-    self.style = style
+    self.variant = style
     self.showChevron = showChevron
     self.trailing = nil
     self.action = action
@@ -149,77 +243,44 @@ public struct DSListRowLink<Destination: View>: View {
   let title: String
   let subtitle: String?
   let icon: String?
-  let iconColor: Color
-  let style: DSListRowStyle
+  let iconColor: Color?
+  let variant: DSListRowVariant
   let destination: Destination
 
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsListRowStyle) private var listRowStyle
+
+  /// `iconColor` defaults to the theme's `colors.textSecondary`.
   public init(
     title: String,
     subtitle: String? = nil,
     icon: String? = nil,
-    iconColor: Color = DSTheme.Colors.textSecondary,
-    style: DSListRowStyle = .standard,
+    iconColor: Color? = nil,
+    style: DSListRowVariant = .standard,
     destination: Destination
   ) {
     self.title = title
     self.subtitle = subtitle
     self.icon = icon
     self.iconColor = iconColor
-    self.style = style
+    self.variant = style
     self.destination = destination
   }
 
   public var body: some View {
     NavigationLink(destination: destination) {
-      HStack(spacing: DSTheme.Spacing.md) {
-        if let icon = icon {
-          Image(systemName: icon)
-            .font(.system(size: DSTheme.IconSize.md))
-            .foregroundColor(iconColor)
-            .frame(width: DSTheme.IconSize.lg)
-        }
-
-        VStack(alignment: .leading, spacing: DSTheme.Spacing.xxs) {
-          Text(title)
-            .font(DSTheme.Typography.label)
-            .foregroundColor(DSTheme.Colors.textPrimary)
-
-          if let subtitle = subtitle {
-            Text(subtitle)
-              .font(DSTheme.Typography.caption)
-              .foregroundColor(DSTheme.Colors.textSecondary)
-          }
-        }
-
-        Spacer()
-
-        Image(systemName: "chevron.right")
-          .font(.system(size: DSTheme.IconSize.sm))
-          .foregroundColor(DSTheme.Colors.textTertiary)
-      }
-    }
-    .applyStyle(style)
-  }
-}
-
-// MARK: - Style Modifier
-
-extension View {
-  @ViewBuilder
-  fileprivate func applyStyle(_ style: DSListRowStyle) -> some View {
-    switch style {
-    case .standard:
-      self
-        .padding(.vertical, DSTheme.Spacing.md)
-        .padding(.horizontal, DSTheme.Spacing.sm)
-    case .card:
-      self
-        .padding(DSTheme.Spacing.lg)
-        .background(DSTheme.Colors.cardBackground)
-        .cornerRadius(DSTheme.Radius.md)
-    case .plain:
-      self
-        .padding(.vertical, DSTheme.Spacing.sm)
+      listRowStyle.makeBody(
+        DSListRowStyleConfiguration(
+          title: title,
+          subtitle: subtitle,
+          icon: icon,
+          iconColor: iconColor ?? theme.colors.textSecondary,
+          variant: variant,
+          showChevron: true,
+          trailing: nil,
+          theme: theme
+        )
+      )
     }
   }
 }
@@ -235,8 +296,7 @@ public struct DSListDivider: View {
   }
 
   public var body: some View {
-    Divider()
-      .padding(.leading, inset)
+    DSDivider(style: .standard, horizontalInset: inset)
   }
 }
 
@@ -269,7 +329,7 @@ public struct DSListDivider: View {
           maxWidth: .infinity, alignment: .leading
         ).padding()
 
-        VStack(spacing: DSTheme.Spacing.sm) {
+        VStack(spacing: DSTheme.default.spacing.sm) {
           DSListRow(title: "Card Row", icon: "folder", style: .card, showChevron: true)
           DSListRow(
             title: "With Subtitle", subtitle: "Additional info", icon: "doc", style: .card,
@@ -289,8 +349,8 @@ public struct DSListDivider: View {
           DSListDivider()
           DSListRow(title: "Count", icon: "bell") {
             Text("5")
-              .font(DSTheme.Typography.caption)
-              .foregroundColor(DSTheme.Colors.textSecondary)
+              .font(DSTheme.default.typography.caption)
+              .foregroundColor(DSTheme.default.colors.textSecondary)
           }
         }
         .padding(.horizontal)
@@ -299,7 +359,7 @@ public struct DSListDivider: View {
           maxWidth: .infinity, alignment: .leading
         ).padding()
 
-        VStack(spacing: DSTheme.Spacing.sm) {
+        VStack(spacing: DSTheme.default.spacing.sm) {
           DSListRowLink(
             title: "Go to Settings",
             icon: "gear",
