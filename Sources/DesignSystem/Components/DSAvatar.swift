@@ -9,7 +9,7 @@ import SwiftUI
 
 // MARK: - Avatar Size
 
-public enum DSAvatarSize {
+public enum DSAvatarSize: Sendable {
   case xs
   case sm
   case md
@@ -18,20 +18,20 @@ public enum DSAvatarSize {
   case xxl
   case custom(CGFloat)
 
-  public var dimension: CGFloat {
+  public func dimension(in theme: DSTheme) -> CGFloat {
     switch self {
     case .xs:
-      return DSTheme.AvatarSize.sm - 8  // 24
+      return theme.avatarSize.sm - 8  // 24
     case .sm:
-      return DSTheme.AvatarSize.sm  // 32
+      return theme.avatarSize.sm  // 32
     case .md:
-      return DSTheme.AvatarSize.md  // 40
+      return theme.avatarSize.md  // 40
     case .lg:
-      return DSTheme.AvatarSize.lg  // 50
+      return theme.avatarSize.lg  // 50
     case .xl:
-      return DSTheme.AvatarSize.xl  // 64
+      return theme.avatarSize.xl  // 64
     case .xxl:
-      return DSTheme.AvatarSize.xxl  // 80
+      return theme.avatarSize.xxl  // 80
     case .custom(let size):
       return size
     }
@@ -57,12 +57,108 @@ public enum DSAvatarSize {
   }
 }
 
-// MARK: - Avatar Style
+// MARK: - Avatar Variant
 
-public enum DSAvatarStyle {
+public enum DSAvatarVariant: Sendable {
   case circle
   case rounded
   case square
+}
+
+// MARK: - Avatar Style
+
+/// The look of `DSAvatar`, `DSAvatarView` and the avatars in `DSAvatarGroup`. Set it with `.dsAvatarStyle(_:)`.
+public protocol DSAvatarStyle: Sendable {
+  typealias Configuration = DSAvatarStyleConfiguration
+  associatedtype Body: View
+
+  @MainActor @ViewBuilder func makeBody(configuration: Configuration) -> Body
+}
+
+/// What an avatar style draws.
+public struct DSAvatarStyleConfiguration {
+  /// One or two uppercase letters.
+  public let initials: String
+  /// An image to show instead of the initials; nil when there is none.
+  public let imageURL: URL?
+  public let size: DSAvatarSize
+  /// The size's width and height in the current theme.
+  public let dimension: CGFloat
+  public let variant: DSAvatarVariant
+  public let backgroundColor: Color
+  public let foregroundColor: Color
+  public let theme: DSTheme
+}
+
+/// The look every avatar had before styles existed.
+public struct DefaultDSAvatarStyle: DSAvatarStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    let dimension = configuration.dimension
+
+    if let url = configuration.imageURL {
+      AsyncImage(url: url) { phase in
+        switch phase {
+        case .success(let image):
+          image
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+        case .failure, .empty:
+          initials(configuration)
+        @unknown default:
+          initials(configuration)
+        }
+      }
+      .frame(width: dimension, height: dimension)
+      .clipShape(shape(configuration))
+    } else {
+      initials(configuration)
+        .frame(width: dimension, height: dimension)
+    }
+  }
+
+  private func initials(_ configuration: Configuration) -> some View {
+    shape(configuration)
+      .fill(configuration.backgroundColor)
+      .overlay {
+        Text(configuration.initials)
+          .font(configuration.size.font)
+          .foregroundColor(configuration.foregroundColor)
+      }
+  }
+
+  private func shape(_ configuration: Configuration) -> AnyShape {
+    switch configuration.variant {
+    case .circle:
+      AnyShape(Circle())
+    case .rounded:
+      AnyShape(RoundedRectangle(cornerRadius: configuration.dimension * 0.2))
+    case .square:
+      AnyShape(RoundedRectangle(cornerRadius: configuration.theme.radius.xs))
+    }
+  }
+}
+
+extension DSAvatarStyle where Self == DefaultDSAvatarStyle {
+  public static var `default`: DefaultDSAvatarStyle { DefaultDSAvatarStyle() }
+}
+
+extension AnyDSStyle where Configuration == DSAvatarStyleConfiguration {
+  init(_ style: some DSAvatarStyle) {
+    self.init { AnyView(style.makeBody(configuration: $0)) }
+  }
+}
+
+extension EnvironmentValues {
+  @Entry var dsAvatarStyle = AnyDSStyle(DefaultDSAvatarStyle())
+}
+
+extension View {
+  /// Set the style of every `DSAvatar`, `DSAvatarView` and `DSAvatarGroup` avatar inside this view.
+  public func dsAvatarStyle(_ style: some DSAvatarStyle) -> some View {
+    environment(\.dsAvatarStyle, AnyDSStyle(style))
+  }
 }
 
 // MARK: - DSAvatar Component
@@ -87,108 +183,61 @@ public enum DSAvatarStyle {
 public struct DSAvatar: View {
   let initials: String
   let size: DSAvatarSize
-  let style: DSAvatarStyle
+  let variant: DSAvatarVariant
   let backgroundColor: Color
-  let foregroundColor: Color
+  let foregroundColor: Color?
   let imageURL: URL?
 
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsAvatarStyle) private var avatarStyle
+
+  /// `foregroundColor` defaults to the theme's `colors.textSecondary`.
   public init(
     name: String,
     size: DSAvatarSize = .md,
-    style: DSAvatarStyle = .circle,
+    style: DSAvatarVariant = .circle,
     backgroundColor: Color? = nil,
-    foregroundColor: Color = DSTheme.Colors.textSecondary,
+    foregroundColor: Color? = nil,
     imageURL: URL? = nil
   ) {
     self.initials = Self.generateInitials(from: name)
     self.size = size
-    self.style = style
+    self.variant = style
     self.backgroundColor = backgroundColor ?? Self.colorForName(name)
     self.foregroundColor = foregroundColor
     self.imageURL = imageURL
   }
 
+  /// `foregroundColor` defaults to the theme's `colors.textSecondary`.
   public init(
     initials: String,
     size: DSAvatarSize = .md,
-    style: DSAvatarStyle = .circle,
+    style: DSAvatarVariant = .circle,
     backgroundColor: Color? = nil,
-    foregroundColor: Color = DSTheme.Colors.textSecondary,
+    foregroundColor: Color? = nil,
     imageURL: URL? = nil
   ) {
     self.initials = String(initials.prefix(2)).uppercased()
     self.size = size
-    self.style = style
+    self.variant = style
     self.backgroundColor = backgroundColor ?? .gray.opacity(0.3)
     self.foregroundColor = foregroundColor
     self.imageURL = imageURL
   }
 
   public var body: some View {
-    Group {
-      if let url = imageURL {
-        AsyncImage(url: url) { phase in
-          switch phase {
-          case .success(let image):
-            image
-              .resizable()
-              .aspectRatio(contentMode: .fill)
-          case .failure, .empty:
-            initialsOverlay
-          @unknown default:
-            initialsOverlay
-          }
-        }
-        .frame(width: size.dimension, height: size.dimension)
-        .clipShape(avatarClipShape)
-      } else {
-        initialsOverlay
-          .frame(width: size.dimension, height: size.dimension)
-      }
-    }
-  }
-
-  @ViewBuilder
-  private var initialsOverlay: some View {
-    Group {
-      switch style {
-      case .circle:
-        Circle()
-          .fill(backgroundColor)
-          .overlay {
-            Text(initials)
-              .font(size.font)
-              .foregroundColor(foregroundColor)
-          }
-      case .rounded:
-        RoundedRectangle(cornerRadius: size.dimension * 0.2)
-          .fill(backgroundColor)
-          .overlay {
-            Text(initials)
-              .font(size.font)
-              .foregroundColor(foregroundColor)
-          }
-      case .square:
-        RoundedRectangle(cornerRadius: DSTheme.Radius.xs)
-          .fill(backgroundColor)
-          .overlay {
-            Text(initials)
-              .font(size.font)
-              .foregroundColor(foregroundColor)
-          }
-      }
-    }
-  }
-
-  private var avatarClipShape: AnyShape {
-    switch style {
-    case .circle:
-      AnyShape(Circle())
-    case .rounded:
-      AnyShape(RoundedRectangle(cornerRadius: size.dimension * 0.2))
-    case .square:
-      AnyShape(RoundedRectangle(cornerRadius: DSTheme.Radius.xs))
-    }
+    avatarStyle.makeBody(
+      DSAvatarStyleConfiguration(
+        initials: initials,
+        imageURL: imageURL,
+        size: size,
+        dimension: size.dimension(in: theme),
+        variant: variant,
+        backgroundColor: backgroundColor,
+        foregroundColor: foregroundColor ?? theme.colors.textSecondary,
+        theme: theme
+      )
+    )
   }
 
   /// Generate initials from a name.
@@ -229,13 +278,17 @@ public struct DSAvatarView: View {
   let initials: String
   let size: DSAvatarSize
   let backgroundColor: Color
-  let foregroundColor: Color
+  let foregroundColor: Color?
 
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsAvatarStyle) private var avatarStyle
+
+  /// `foregroundColor` defaults to the theme's `colors.textSecondary`.
   public init(
     name: String,
     size: DSAvatarSize = .md,
     backgroundColor: Color? = nil,
-    foregroundColor: Color = DSTheme.Colors.textSecondary
+    foregroundColor: Color? = nil
   ) {
     self.initials = DSAvatar.generateInitials(from: name)
     self.size = size
@@ -243,11 +296,12 @@ public struct DSAvatarView: View {
     self.foregroundColor = foregroundColor
   }
 
+  /// `foregroundColor` defaults to the theme's `colors.textSecondary`.
   public init(
     initials: String,
     size: DSAvatarSize = .md,
     backgroundColor: Color = .gray.opacity(0.3),
-    foregroundColor: Color = DSTheme.Colors.textSecondary
+    foregroundColor: Color? = nil
   ) {
     self.initials = String(initials.prefix(2)).uppercased()
     self.size = size
@@ -256,14 +310,18 @@ public struct DSAvatarView: View {
   }
 
   public var body: some View {
-    Circle()
-      .fill(backgroundColor)
-      .frame(width: size.dimension, height: size.dimension)
-      .overlay {
-        Text(initials)
-          .font(size.font)
-          .foregroundColor(foregroundColor)
-      }
+    avatarStyle.makeBody(
+      DSAvatarStyleConfiguration(
+        initials: initials,
+        imageURL: nil,
+        size: size,
+        dimension: size.dimension(in: theme),
+        variant: .circle,
+        backgroundColor: backgroundColor,
+        foregroundColor: foregroundColor ?? theme.colors.textSecondary,
+        theme: theme
+      )
+    )
   }
 }
 
@@ -279,8 +337,11 @@ public struct DSAvatarGroup: View {
   let names: [String]
   let size: DSAvatarSize
   let maxVisible: Int
-  let overlapOffset: CGFloat
+  let overlapOffset: CGFloat?
 
+  @Environment(\.dsTheme) private var theme
+
+  /// `overlapOffset` defaults to 60% of the avatar size.
   public init(
     names: [String],
     size: DSAvatarSize = .sm,
@@ -290,32 +351,35 @@ public struct DSAvatarGroup: View {
     self.names = names
     self.size = size
     self.maxVisible = maxVisible
-    self.overlapOffset = overlapOffset ?? (size.dimension * 0.6)
+    self.overlapOffset = overlapOffset
   }
 
   public var body: some View {
-    HStack(spacing: -overlapOffset + size.dimension) {
+    let dimension = size.dimension(in: theme)
+    let offset = overlapOffset ?? (dimension * 0.6)
+
+    HStack(spacing: -offset + dimension) {
       ForEach(Array(visibleNames.enumerated()), id: \.offset) { index, name in
         DSAvatarView(name: name, size: size)
           .overlay(
             Circle()
-              .stroke(Color(.systemBackground), lineWidth: 2)
+              .stroke(theme.colors.background, lineWidth: 2)
           )
           .zIndex(Double(visibleNames.count - index))
       }
 
       if remainingCount > 0 {
         Circle()
-          .fill(DSTheme.Colors.cardBackground)
-          .frame(width: size.dimension, height: size.dimension)
+          .fill(theme.colors.cardBackground)
+          .frame(width: dimension, height: dimension)
           .overlay {
             Text("+\(remainingCount)")
               .font(size.font)
-              .foregroundColor(DSTheme.Colors.textSecondary)
+              .foregroundColor(theme.colors.textSecondary)
           }
           .overlay(
             Circle()
-              .stroke(Color(.systemBackground), lineWidth: 2)
+              .stroke(theme.colors.background, lineWidth: 2)
           )
       }
     }
@@ -334,10 +398,10 @@ public struct DSAvatarGroup: View {
 
 #Preview("Avatars") {
   ScrollView {
-    VStack(spacing: DSTheme.Spacing.xl) {
+    VStack(spacing: DSTheme.default.spacing.xl) {
       Group {
         Text("Sizes").font(.caption).foregroundColor(.secondary)
-        HStack(spacing: DSTheme.Spacing.md) {
+        HStack(spacing: DSTheme.default.spacing.md) {
           DSAvatarView(name: "John Doe", size: .xs)
           DSAvatarView(name: "John Doe", size: .sm)
           DSAvatarView(name: "John Doe", size: .md)
@@ -350,7 +414,7 @@ public struct DSAvatarGroup: View {
 
       Group {
         Text("Different Names").font(.caption).foregroundColor(.secondary)
-        HStack(spacing: DSTheme.Spacing.md) {
+        HStack(spacing: DSTheme.default.spacing.md) {
           DSAvatarView(name: "Alice")
           DSAvatarView(name: "Bob Smith")
           DSAvatarView(name: "Charlie Brown")
@@ -362,7 +426,7 @@ public struct DSAvatarGroup: View {
 
       Group {
         Text("Custom Initials").font(.caption).foregroundColor(.secondary)
-        HStack(spacing: DSTheme.Spacing.md) {
+        HStack(spacing: DSTheme.default.spacing.md) {
           DSAvatarView(initials: "AB", size: .lg)
           DSAvatarView(initials: "XY", size: .lg, backgroundColor: .purple.opacity(0.3))
           DSAvatarView(initials: "?", size: .lg, backgroundColor: .red.opacity(0.3))

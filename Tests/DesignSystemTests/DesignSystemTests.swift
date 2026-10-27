@@ -15,57 +15,57 @@ import Testing
 struct ThemeSpacingTests {
   @Test("Spacing tokens have correct relative sizes")
   func testSpacingRelativeSizes() {
-    #expect(DSTheme.Spacing.xxs < DSTheme.Spacing.xs)
-    #expect(DSTheme.Spacing.xs < DSTheme.Spacing.sm)
-    #expect(DSTheme.Spacing.sm < DSTheme.Spacing.md)
-    #expect(DSTheme.Spacing.md < DSTheme.Spacing.lg)
-    #expect(DSTheme.Spacing.lg < DSTheme.Spacing.xl)
-    #expect(DSTheme.Spacing.xl < DSTheme.Spacing.xxl)
+    #expect(DSTheme.default.spacing.xxs < DSTheme.default.spacing.xs)
+    #expect(DSTheme.default.spacing.xs < DSTheme.default.spacing.sm)
+    #expect(DSTheme.default.spacing.sm < DSTheme.default.spacing.md)
+    #expect(DSTheme.default.spacing.md < DSTheme.default.spacing.lg)
+    #expect(DSTheme.default.spacing.lg < DSTheme.default.spacing.xl)
+    #expect(DSTheme.default.spacing.xl < DSTheme.default.spacing.xxl)
   }
 
   @Test("Spacing tokens are positive values")
   func testSpacingPositiveValues() {
-    #expect(DSTheme.Spacing.xxs > 0)
-    #expect(DSTheme.Spacing.xs > 0)
-    #expect(DSTheme.Spacing.sm > 0)
-    #expect(DSTheme.Spacing.md > 0)
-    #expect(DSTheme.Spacing.lg > 0)
-    #expect(DSTheme.Spacing.xl > 0)
-    #expect(DSTheme.Spacing.xxl > 0)
+    #expect(DSTheme.default.spacing.xxs > 0)
+    #expect(DSTheme.default.spacing.xs > 0)
+    #expect(DSTheme.default.spacing.sm > 0)
+    #expect(DSTheme.default.spacing.md > 0)
+    #expect(DSTheme.default.spacing.lg > 0)
+    #expect(DSTheme.default.spacing.xl > 0)
+    #expect(DSTheme.default.spacing.xxl > 0)
   }
 }
 
 struct ThemeRadiusTests {
   @Test("Radius tokens have correct relative sizes")
   func testRadiusRelativeSizes() {
-    #expect(DSTheme.Radius.xs < DSTheme.Radius.sm)
-    #expect(DSTheme.Radius.sm < DSTheme.Radius.md)
-    #expect(DSTheme.Radius.md < DSTheme.Radius.lg)
-    #expect(DSTheme.Radius.lg < DSTheme.Radius.xl)
+    #expect(DSTheme.default.radius.xs < DSTheme.default.radius.sm)
+    #expect(DSTheme.default.radius.sm < DSTheme.default.radius.md)
+    #expect(DSTheme.default.radius.md < DSTheme.default.radius.lg)
+    #expect(DSTheme.default.radius.lg < DSTheme.default.radius.xl)
   }
 
   @Test("Full radius is large enough for pill shapes")
   func testFullRadius() {
-    #expect(DSTheme.Radius.full >= 100)
+    #expect(DSTheme.default.radius.full >= 100)
   }
 }
 
 struct ThemeIconSizeTests {
   @Test("Icon sizes have correct relative sizes")
   func testIconSizeRelativeSizes() {
-    #expect(DSTheme.IconSize.sm < DSTheme.IconSize.md)
-    #expect(DSTheme.IconSize.md < DSTheme.IconSize.lg)
-    #expect(DSTheme.IconSize.lg < DSTheme.IconSize.xl)
+    #expect(DSTheme.default.iconSize.sm < DSTheme.default.iconSize.md)
+    #expect(DSTheme.default.iconSize.md < DSTheme.default.iconSize.lg)
+    #expect(DSTheme.default.iconSize.lg < DSTheme.default.iconSize.xl)
   }
 }
 
 struct ThemeAvatarSizeTests {
   @Test("Avatar sizes have correct relative sizes")
   func testAvatarSizeRelativeSizes() {
-    #expect(DSTheme.AvatarSize.sm < DSTheme.AvatarSize.md)
-    #expect(DSTheme.AvatarSize.md < DSTheme.AvatarSize.lg)
-    #expect(DSTheme.AvatarSize.lg < DSTheme.AvatarSize.xl)
-    #expect(DSTheme.AvatarSize.xl < DSTheme.AvatarSize.xxl)
+    #expect(DSTheme.default.avatarSize.sm < DSTheme.default.avatarSize.md)
+    #expect(DSTheme.default.avatarSize.md < DSTheme.default.avatarSize.lg)
+    #expect(DSTheme.default.avatarSize.lg < DSTheme.default.avatarSize.xl)
+    #expect(DSTheme.default.avatarSize.xl < DSTheme.default.avatarSize.xxl)
   }
 }
 
@@ -74,52 +74,60 @@ struct ThemeAvatarSizeTests {
 struct DSButtonStyleTests {
   @Test("Primary style has primary background color")
   func testPrimaryStyleBackground() {
-    let style = DSButtonStyle.primary
-    #expect(style.backgroundColor == DSTheme.Colors.primary)
+    let style = DSButtonVariant.primary
+    #expect(style.backgroundColor(in: .default) == DSTheme.default.colors.primary)
   }
 
   @Test("Destructive style has error background color")
   func testDestructiveStyleBackground() {
-    let style = DSButtonStyle.destructive
-    #expect(style.backgroundColor == DSTheme.Colors.error)
+    let style = DSButtonVariant.destructive
+    #expect(style.backgroundColor(in: .default) == DSTheme.default.colors.error)
   }
 
   @Test("Ghost style has clear background")
   func testGhostStyleBackground() {
-    let style = DSButtonStyle.ghost
-    #expect(style.backgroundColor == .clear)
+    let style = DSButtonVariant.ghost
+    #expect(style.backgroundColor(in: .default) == .clear)
   }
 
   @Test("Outline style has clear background")
   func testOutlineStyleBackground() {
-    let style = DSButtonStyle.outline
-    #expect(style.backgroundColor == .clear)
+    let style = DSButtonVariant.outline
+    #expect(style.backgroundColor(in: .default) == .clear)
   }
 
   @Test("Outline style has border color")
   func testOutlineStyleHasBorder() {
-    let style = DSButtonStyle.outline
-    #expect(style.borderColor != nil)
+    let style = DSButtonVariant.outline
+    #expect(style.borderColor(in: .default) != nil)
   }
 
   @Test("Primary style has no border")
   func testPrimaryStyleNoBorder() {
-    let style = DSButtonStyle.primary
-    #expect(style.borderColor == nil)
+    let style = DSButtonVariant.primary
+    #expect(style.borderColor(in: .default) == nil)
   }
 }
 
 struct DSButtonSizeTests {
   @Test("Button sizes have increasing padding")
   func testButtonSizePadding() {
-    #expect(DSButtonSize.small.verticalPadding < DSButtonSize.medium.verticalPadding)
-    #expect(DSButtonSize.medium.verticalPadding < DSButtonSize.large.verticalPadding)
+    #expect(
+      DSButtonSize.small.verticalPadding(in: .default)
+        < DSButtonSize.medium.verticalPadding(in: .default))
+    #expect(
+      DSButtonSize.medium.verticalPadding(in: .default)
+        < DSButtonSize.large.verticalPadding(in: .default))
   }
 
   @Test("Button sizes have increasing horizontal padding")
   func testButtonSizeHorizontalPadding() {
-    #expect(DSButtonSize.small.horizontalPadding < DSButtonSize.medium.horizontalPadding)
-    #expect(DSButtonSize.medium.horizontalPadding < DSButtonSize.large.horizontalPadding)
+    #expect(
+      DSButtonSize.small.horizontalPadding(in: .default)
+        < DSButtonSize.medium.horizontalPadding(in: .default))
+    #expect(
+      DSButtonSize.medium.horizontalPadding(in: .default)
+        < DSButtonSize.large.horizontalPadding(in: .default))
   }
 }
 
@@ -161,9 +169,9 @@ struct DSStatusTypeTests {
   @Test("Status types have distinct colors")
   func testStatusTypesHaveDistinctColors() {
     // These should have different colors for visual distinction
-    let pendingColor = DSStatusType.pending.color
-    let successColor = DSStatusType.success.color
-    let errorColor = DSStatusType.error.color
+    let pendingColor = DSStatusType.pending.color(in: .default)
+    let successColor = DSStatusType.success.color(in: .default)
+    let errorColor = DSStatusType.error.color(in: .default)
 
     #expect(pendingColor != successColor)
     #expect(successColor != errorColor)
@@ -175,17 +183,17 @@ struct DSStatusTypeTests {
 struct DSAvatarSizeTests {
   @Test("Avatar size dimensions are correct")
   func testAvatarSizeDimensions() {
-    #expect(DSAvatarSize.xs.dimension < DSAvatarSize.sm.dimension)
-    #expect(DSAvatarSize.sm.dimension < DSAvatarSize.md.dimension)
-    #expect(DSAvatarSize.md.dimension < DSAvatarSize.lg.dimension)
-    #expect(DSAvatarSize.lg.dimension < DSAvatarSize.xl.dimension)
-    #expect(DSAvatarSize.xl.dimension < DSAvatarSize.xxl.dimension)
+    #expect(DSAvatarSize.xs.dimension(in: .default) < DSAvatarSize.sm.dimension(in: .default))
+    #expect(DSAvatarSize.sm.dimension(in: .default) < DSAvatarSize.md.dimension(in: .default))
+    #expect(DSAvatarSize.md.dimension(in: .default) < DSAvatarSize.lg.dimension(in: .default))
+    #expect(DSAvatarSize.lg.dimension(in: .default) < DSAvatarSize.xl.dimension(in: .default))
+    #expect(DSAvatarSize.xl.dimension(in: .default) < DSAvatarSize.xxl.dimension(in: .default))
   }
 
   @Test("Custom avatar size uses provided value")
   func testCustomAvatarSize() {
     let customSize: CGFloat = 100
-    #expect(DSAvatarSize.custom(customSize).dimension == customSize)
+    #expect(DSAvatarSize.custom(customSize).dimension(in: .default) == customSize)
   }
 }
 
@@ -194,7 +202,7 @@ struct DSAvatarSizeTests {
 struct DSCardStyleTests {
   @Test("All card styles are distinct")
   func testCardStylesAreDistinct() {
-    let styles: [DSCardStyle] = [.standard, .elevated, .outlined, .selected, .interactive]
+    let styles: [DSCardVariant] = [.standard, .elevated, .outlined, .selected, .interactive]
     let uniqueCount = Set(styles.map { "\($0)" }).count
     #expect(uniqueCount == styles.count)
   }
@@ -205,14 +213,22 @@ struct DSCardStyleTests {
 struct DSEmptyStateSizeTests {
   @Test("Empty state sizes have increasing icon sizes")
   func testEmptyStateSizes() {
-    #expect(DSEmptyStateSize.compact.iconSize < DSEmptyStateSize.standard.iconSize)
-    #expect(DSEmptyStateSize.standard.iconSize < DSEmptyStateSize.large.iconSize)
+    #expect(
+      DSEmptyStateSize.compact.iconSize(in: .default)
+        < DSEmptyStateSize.standard.iconSize(in: .default))
+    #expect(
+      DSEmptyStateSize.standard.iconSize(in: .default)
+        < DSEmptyStateSize.large.iconSize(in: .default))
   }
 
   @Test("Empty state sizes have increasing spacing")
   func testEmptyStateSpacing() {
-    #expect(DSEmptyStateSize.compact.spacing < DSEmptyStateSize.standard.spacing)
-    #expect(DSEmptyStateSize.standard.spacing < DSEmptyStateSize.large.spacing)
+    #expect(
+      DSEmptyStateSize.compact.spacing(in: .default)
+        < DSEmptyStateSize.standard.spacing(in: .default))
+    #expect(
+      DSEmptyStateSize.standard.spacing(in: .default) < DSEmptyStateSize.large.spacing(in: .default)
+    )
   }
 }
 
@@ -228,7 +244,9 @@ struct ComponentInstantiationTests {
   @Test("DSButton can be instantiated with all style variants")
   @MainActor
   func testDSButtonStyles() {
-    let styles: [DSButtonStyle] = [.primary, .secondary, .tertiary, .destructive, .ghost, .outline]
+    let styles: [DSButtonVariant] = [
+      .primary, .secondary, .tertiary, .destructive, .ghost, .outline,
+    ]
     for style in styles {
       _ = DSButton("Test", style: style) {}
     }
@@ -237,7 +255,7 @@ struct ComponentInstantiationTests {
   @Test("DSCard can be instantiated with all style variants")
   @MainActor
   func testDSCardStyles() {
-    let styles: [DSCardStyle] = [.standard, .elevated, .outlined, .selected, .interactive]
+    let styles: [DSCardVariant] = [.standard, .elevated, .outlined, .selected, .interactive]
     for style in styles {
       _ = DSCard(style: style) {
         Text("Content")

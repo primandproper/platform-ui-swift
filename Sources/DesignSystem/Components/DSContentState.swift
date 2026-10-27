@@ -9,6 +9,64 @@ import SwiftUI
 
 // MARK: - DSLoadingView
 
+/// The look of `DSLoadingView`, `DSInitializingView` and the loading state of `DSContentState`. Set it with `.dsLoadingStyle(_:)`.
+public protocol DSLoadingStyle: Sendable {
+  typealias Configuration = DSLoadingStyleConfiguration
+  associatedtype Body: View
+
+  @MainActor @ViewBuilder func makeBody(configuration: Configuration) -> Body
+}
+
+/// What a loading style draws.
+public struct DSLoadingStyleConfiguration {
+  public let message: String?
+  public let size: DSLoadingView.Size
+  public let theme: DSTheme
+}
+
+/// The look every loading view had before styles existed.
+public struct DefaultDSLoadingStyle: DSLoadingStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    let theme = configuration.theme
+    let size = configuration.size
+
+    VStack(spacing: size.spacing(in: theme)) {
+      ProgressView()
+        .scaleEffect(size.progressScale)
+
+      if let message = configuration.message {
+        Text(message)
+          .font(size.textFont(in: theme))
+          .foregroundColor(theme.colors.textSecondary)
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}
+
+extension DSLoadingStyle where Self == DefaultDSLoadingStyle {
+  public static var `default`: DefaultDSLoadingStyle { DefaultDSLoadingStyle() }
+}
+
+extension AnyDSStyle where Configuration == DSLoadingStyleConfiguration {
+  init(_ style: some DSLoadingStyle) {
+    self.init { AnyView(style.makeBody(configuration: $0)) }
+  }
+}
+
+extension EnvironmentValues {
+  @Entry var dsLoadingStyle = AnyDSStyle(DefaultDSLoadingStyle())
+}
+
+extension View {
+  /// Set the style of every `DSLoadingView`, `DSInitializingView` and `DSContentState` loading state inside this view.
+  public func dsLoadingStyle(_ style: some DSLoadingStyle) -> some View {
+    environment(\.dsLoadingStyle, AnyDSStyle(style))
+  }
+}
+
 /// A consistent loading indicator view.
 ///
 /// Usage:
@@ -21,7 +79,10 @@ public struct DSLoadingView: View {
   let message: String?
   let size: Size
 
-  public enum Size {
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsLoadingStyle) private var loadingStyle
+
+  public enum Size: Sendable {
     case small
     case medium
     case large
@@ -37,25 +98,25 @@ public struct DSLoadingView: View {
       }
     }
 
-    public var textFont: Font {
+    public func textFont(in theme: DSTheme) -> Font {
       switch self {
       case .small:
-        return DSTheme.Typography.caption
+        return theme.typography.caption
       case .medium:
-        return DSTheme.Typography.body
+        return theme.typography.body
       case .large:
-        return DSTheme.Typography.label
+        return theme.typography.label
       }
     }
 
-    public var spacing: CGFloat {
+    public func spacing(in theme: DSTheme) -> CGFloat {
       switch self {
       case .small:
-        return DSTheme.Spacing.sm
+        return theme.spacing.sm
       case .medium:
-        return DSTheme.Spacing.md
+        return theme.spacing.md
       case .large:
-        return DSTheme.Spacing.lg
+        return theme.spacing.lg
       }
     }
   }
@@ -66,21 +127,96 @@ public struct DSLoadingView: View {
   }
 
   public var body: some View {
-    VStack(spacing: size.spacing) {
-      ProgressView()
-        .scaleEffect(size.progressScale)
+    loadingStyle.makeBody(DSLoadingStyleConfiguration(message: message, size: size, theme: theme))
+  }
+}
 
-      if let message = message {
-        Text(message)
-          .font(size.textFont)
-          .foregroundColor(DSTheme.Colors.textSecondary)
+// MARK: - DSErrorView
+
+/// The look of `DSErrorView` and the error state of `DSContentState`. Set it with `.dsErrorStyle(_:)`.
+public protocol DSErrorStyle: Sendable {
+  typealias Configuration = DSErrorStyleConfiguration
+  associatedtype Body: View
+
+  @MainActor @ViewBuilder func makeBody(configuration: Configuration) -> Body
+}
+
+/// What an error style draws.
+public struct DSErrorStyleConfiguration {
+  public let title: String
+  public let message: String
+  /// An SF Symbol name.
+  public let icon: String
+  public let iconColor: Color
+  public let retryTitle: String
+  /// What the retry button does; nil when the caller offered no retry.
+  public let onRetry: (() async -> Void)?
+  /// Whatever the caller asked to show beneath the error; nil when it asked for nothing.
+  public let accessory: AnyView?
+  public let theme: DSTheme
+}
+
+/// The look every error view had before styles existed.
+public struct DefaultDSErrorStyle: DSErrorStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    let theme = configuration.theme
+
+    VStack(spacing: theme.spacing.lg) {
+      Image(systemName: configuration.icon)
+        .font(.system(size: theme.iconSize.xxl))
+        .foregroundColor(configuration.iconColor)
+
+      VStack(spacing: theme.spacing.sm) {
+        Text(configuration.title)
+          .font(theme.typography.title3)
+          .foregroundColor(theme.colors.textPrimary)
+
+        Text(configuration.message)
+          .font(theme.typography.body)
+          .foregroundColor(theme.colors.textSecondary)
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, theme.spacing.xl)
+      }
+
+      if let onRetry = configuration.onRetry {
+        DSButton(configuration.retryTitle, icon: "arrow.clockwise", style: .primary) {
+          Task {
+            await onRetry()
+          }
+        }
+      }
+
+      if let accessory = configuration.accessory {
+        accessory
+          .padding(.top, theme.spacing.sm)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
 
-// MARK: - DSErrorView
+extension DSErrorStyle where Self == DefaultDSErrorStyle {
+  public static var `default`: DefaultDSErrorStyle { DefaultDSErrorStyle() }
+}
+
+extension AnyDSStyle where Configuration == DSErrorStyleConfiguration {
+  init(_ style: some DSErrorStyle) {
+    self.init { AnyView(style.makeBody(configuration: $0)) }
+  }
+}
+
+extension EnvironmentValues {
+  @Entry var dsErrorStyle = AnyDSStyle(DefaultDSErrorStyle())
+}
+
+extension View {
+  /// Set the style of every `DSErrorView` and `DSContentState` error state inside this view.
+  public func dsErrorStyle(_ style: some DSErrorStyle) -> some View {
+    environment(\.dsErrorStyle, AnyDSStyle(style))
+  }
+}
 
 /// A consistent error display view with optional retry action.
 ///
@@ -94,16 +230,20 @@ public struct DSErrorView: View {
   let message: String
   let title: String
   let icon: String
-  let iconColor: Color
+  let iconColor: Color?
   let retryTitle: String
   let onRetry: (() async -> Void)?
   let accessory: AnyView?
 
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsErrorStyle) private var errorStyle
+
+  /// `iconColor` defaults to the theme's `colors.warning`.
   public init(
     _ message: String,
     title: String = "Error",
     icon: String = "exclamationmark.triangle",
-    iconColor: Color = DSTheme.Colors.warning,
+    iconColor: Color? = nil,
     retryTitle: String = "Retry",
     onRetry: (() async -> Void)? = nil,
     accessory: AnyView? = nil
@@ -118,37 +258,18 @@ public struct DSErrorView: View {
   }
 
   public var body: some View {
-    VStack(spacing: DSTheme.Spacing.lg) {
-      Image(systemName: icon)
-        .font(.system(size: DSTheme.IconSize.xxl))
-        .foregroundColor(iconColor)
-
-      VStack(spacing: DSTheme.Spacing.sm) {
-        Text(title)
-          .font(DSTheme.Typography.title3)
-          .foregroundColor(DSTheme.Colors.textPrimary)
-
-        Text(message)
-          .font(DSTheme.Typography.body)
-          .foregroundColor(DSTheme.Colors.textSecondary)
-          .multilineTextAlignment(.center)
-          .padding(.horizontal, DSTheme.Spacing.xl)
-      }
-
-      if let onRetry = onRetry {
-        DSButton(retryTitle, icon: "arrow.clockwise", style: .primary) {
-          Task {
-            await onRetry()
-          }
-        }
-      }
-
-      if let accessory {
-        accessory
-          .padding(.top, DSTheme.Spacing.sm)
-      }
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    errorStyle.makeBody(
+      DSErrorStyleConfiguration(
+        title: title,
+        message: message,
+        icon: icon,
+        iconColor: iconColor ?? theme.colors.warning,
+        retryTitle: retryTitle,
+        onRetry: onRetry,
+        accessory: accessory,
+        theme: theme
+      )
+    )
   }
 }
 
@@ -184,18 +305,19 @@ public struct DSContentState<Content: View>: View {
   let error: String?
   let errorTitle: String
   let errorIcon: String
-  let errorIconColor: Color
+  let errorIconColor: Color?
   let onRetry: (() async -> Void)?
   let errorAccessory: AnyView?
   @ViewBuilder let content: () -> Content
 
+  /// `errorIconColor` defaults to the theme's `colors.warning`.
   public init(
     isLoading: Bool,
     loadingMessage: String? = "Loading...",
     error: String? = nil,
     errorTitle: String = "Error",
     errorIcon: String = "exclamationmark.triangle",
-    errorIconColor: Color = DSTheme.Colors.warning,
+    errorIconColor: Color? = nil,
     onRetry: (() async -> Void)? = nil,
     errorAccessory: AnyView? = nil,
     @ViewBuilder content: @escaping () -> Content
@@ -230,7 +352,6 @@ public struct DSContentState<Content: View>: View {
     }
   }
 }
-
 // MARK: - Initializing State View
 
 /// A view for the initializing/setup state before the view model is ready.

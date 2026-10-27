@@ -7,9 +7,9 @@
 
 import SwiftUI
 
-// MARK: - Button Style
+// MARK: - Button Variant
 
-public enum DSButtonStyle {
+public enum DSButtonVariant: Sendable {
   case primary
   case secondary
   case tertiary
@@ -18,38 +18,38 @@ public enum DSButtonStyle {
   case ghost
   case outline
 
-  public var backgroundColor: Color {
+  public func backgroundColor(in theme: DSTheme) -> Color {
     switch self {
     case .primary:
-      return DSTheme.Colors.primary
+      return theme.colors.primary
     case .secondary:
-      return DSTheme.Colors.secondary
+      return theme.colors.secondary
     case .tertiary:
-      return DSTheme.Colors.tertiary
+      return theme.colors.tertiary
     case .destructive:
-      return DSTheme.Colors.error
+      return theme.colors.error
     case .destructiveGhost, .ghost, .outline:
       return .clear
     }
   }
 
-  public var foregroundColor: Color {
+  public func foregroundColor(in theme: DSTheme) -> Color {
     switch self {
     case .primary, .secondary, .tertiary, .destructive:
-      return DSTheme.Colors.textOnPrimary
+      return theme.colors.textOnPrimary
     case .destructiveGhost:
-      return DSTheme.Colors.error
+      return theme.colors.error
     case .ghost:
-      return DSTheme.Colors.primary
+      return theme.colors.primary
     case .outline:
-      return DSTheme.Colors.textPrimary
+      return theme.colors.textPrimary
     }
   }
 
-  public var borderColor: Color? {
+  public func borderColor(in theme: DSTheme) -> Color? {
     switch self {
     case .outline:
-      return DSTheme.Colors.border
+      return theme.colors.border
     default:
       return nil
     }
@@ -71,51 +71,204 @@ public enum DSButtonStyle {
 
 // MARK: - Button Size
 
-public enum DSButtonSize {
+public enum DSButtonSize: Sendable {
   case small
   case medium
   case large
 
-  public var verticalPadding: CGFloat {
+  public func verticalPadding(in theme: DSTheme) -> CGFloat {
     switch self {
     case .small:
-      return DSTheme.Spacing.sm
+      return theme.spacing.sm
     case .medium:
-      return DSTheme.Spacing.md
+      return theme.spacing.md
     case .large:
-      return DSTheme.Spacing.lg
+      return theme.spacing.lg
     }
   }
 
-  public var horizontalPadding: CGFloat {
+  public func horizontalPadding(in theme: DSTheme) -> CGFloat {
     switch self {
     case .small:
-      return DSTheme.Spacing.md
+      return theme.spacing.md
     case .medium:
-      return DSTheme.Spacing.lg
+      return theme.spacing.lg
     case .large:
-      return DSTheme.Spacing.xl
+      return theme.spacing.xl
     }
   }
 
-  public var font: Font {
+  public func font(in theme: DSTheme) -> Font {
     switch self {
     case .small:
-      return DSTheme.Typography.buttonSmall
+      return theme.typography.buttonSmall
     case .medium, .large:
-      return DSTheme.Typography.button
+      return theme.typography.button
     }
   }
 
-  public var iconSize: CGFloat {
+  public func iconSize(in theme: DSTheme) -> CGFloat {
     switch self {
     case .small:
-      return DSTheme.IconSize.sm
+      return theme.iconSize.sm
     case .medium:
-      return DSTheme.IconSize.md
+      return theme.iconSize.md
     case .large:
-      return DSTheme.IconSize.lg
+      return theme.iconSize.lg
     }
+  }
+
+  /// The diameter of an icon-only button.
+  public var iconButtonDimension: CGFloat {
+    switch self {
+    case .small:
+      return 32
+    case .medium:
+      return 40
+    case .large:
+      return 48
+    }
+  }
+}
+
+// MARK: - Button Style
+
+/// The look of `DSButton`, `DSButtonLink` and `DSIconButton`. Set it with `.dsButtonStyle(_:)`.
+public protocol DSButtonStyle: Sendable {
+  typealias Configuration = DSButtonStyleConfiguration
+  associatedtype Body: View
+
+  @MainActor @ViewBuilder func makeBody(configuration: Configuration) -> Body
+}
+
+/// What a button style draws.
+public struct DSButtonStyleConfiguration {
+  /// The button's text; nil for an icon-only `DSIconButton`.
+  public let title: String?
+  /// An SF Symbol name.
+  public let icon: String?
+  public let iconPosition: DSButton.IconPosition
+  public let variant: DSButtonVariant
+  public let size: DSButtonSize
+  public let fullWidth: Bool
+  public let isLoading: Bool
+  public let isDisabled: Bool
+  public internal(set) var isPressed: Bool
+  public let theme: DSTheme
+}
+
+/// The look every button had before styles existed.
+public struct DefaultDSButtonStyle: DSButtonStyle {
+  public init() {}
+
+  public func makeBody(configuration: Configuration) -> some View {
+    if let title = configuration.title {
+      labeledButton(configuration, title: title)
+    } else {
+      iconButton(configuration)
+    }
+  }
+
+  @ViewBuilder
+  private func labeledButton(_ configuration: Configuration, title: String) -> some View {
+    let theme = configuration.theme
+    let size = configuration.size
+    let variant = configuration.variant
+    let foreground = foregroundColor(configuration)
+
+    HStack(spacing: theme.spacing.sm) {
+      if configuration.isLoading {
+        ProgressView()
+          .progressViewStyle(CircularProgressViewStyle(tint: foreground))
+          .scaleEffect(0.8)
+      } else if let icon = configuration.icon, configuration.iconPosition == .leading {
+        Image(systemName: icon)
+          .font(.system(size: size.iconSize(in: theme)))
+      }
+
+      Text(title)
+        .font(size.font(in: theme))
+
+      if !configuration.isLoading, let icon = configuration.icon,
+        configuration.iconPosition == .trailing
+      {
+        Image(systemName: icon)
+          .font(.system(size: size.iconSize(in: theme)))
+      }
+    }
+    .frame(maxWidth: configuration.fullWidth ? .infinity : nil)
+    .padding(.vertical, size.verticalPadding(in: theme))
+    .padding(.horizontal, size.horizontalPadding(in: theme))
+    .foregroundColor(foreground)
+    .background(backgroundColor(configuration))
+    .cornerRadius(theme.radius.md)
+    .overlay(
+      RoundedRectangle(cornerRadius: theme.radius.md)
+        .stroke(
+          configuration.isDisabled
+            ? Color.gray.opacity(0.3) : (variant.borderColor(in: theme) ?? .clear),
+          lineWidth: variant.borderColor(in: theme) != nil ? 1 : 0
+        )
+    )
+    .opacity(configuration.isPressed ? 0.7 : 1)
+  }
+
+  private func iconButton(_ configuration: Configuration) -> some View {
+    let dimension = configuration.size.iconButtonDimension
+
+    return Image(systemName: configuration.icon ?? "")
+      .font(.system(size: configuration.size.iconSize(in: configuration.theme)))
+      .foregroundColor(foregroundColor(configuration))
+      .frame(width: dimension, height: dimension)
+      .background(backgroundColor(configuration))
+      .clipShape(Circle())
+      .opacity(configuration.isPressed ? 0.7 : 1)
+  }
+
+  private func foregroundColor(_ configuration: Configuration) -> Color {
+    configuration.isDisabled
+      ? configuration.variant.disabledForegroundColor
+      : configuration.variant.foregroundColor(in: configuration.theme)
+  }
+
+  private func backgroundColor(_ configuration: Configuration) -> Color {
+    configuration.isDisabled
+      ? configuration.variant.disabledBackgroundColor
+      : configuration.variant.backgroundColor(in: configuration.theme)
+  }
+}
+
+extension DSButtonStyle where Self == DefaultDSButtonStyle {
+  public static var `default`: DefaultDSButtonStyle { DefaultDSButtonStyle() }
+}
+
+extension AnyDSStyle where Configuration == DSButtonStyleConfiguration {
+  init(_ style: some DSButtonStyle) {
+    self.init { AnyView(style.makeBody(configuration: $0)) }
+  }
+}
+
+extension EnvironmentValues {
+  @Entry var dsButtonStyle = AnyDSStyle(DefaultDSButtonStyle())
+}
+
+extension View {
+  /// Set the style of every `DSButton`, `DSButtonLink` and `DSIconButton` inside this view.
+  public func dsButtonStyle(_ style: some DSButtonStyle) -> some View {
+    environment(\.dsButtonStyle, AnyDSStyle(style))
+  }
+}
+
+/// Hands a DS button style to SwiftUI's button machinery, which is what knows whether the
+/// button is pressed.
+private struct DSButtonStyleBridge: ButtonStyle {
+  let style: AnyDSStyle<DSButtonStyleConfiguration>
+  let configuration: DSButtonStyleConfiguration
+
+  func makeBody(configuration: ButtonStyleConfiguration) -> some View {
+    var dsConfiguration = self.configuration
+    dsConfiguration.isPressed = configuration.isPressed
+    return style.makeBody(dsConfiguration)
   }
 }
 
@@ -142,14 +295,17 @@ public struct DSButton: View {
   let title: String
   let icon: String?
   let iconPosition: IconPosition
-  let style: DSButtonStyle
+  let variant: DSButtonVariant
   let size: DSButtonSize
   let fullWidth: Bool
   let isLoading: Bool
   let isDisabled: Bool
   let action: () -> Void
 
-  public enum IconPosition {
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsButtonStyle) private var buttonStyle
+
+  public enum IconPosition: Sendable {
     case leading
     case trailing
   }
@@ -158,7 +314,7 @@ public struct DSButton: View {
     _ title: String,
     icon: String? = nil,
     iconPosition: IconPosition = .leading,
-    style: DSButtonStyle = .primary,
+    style: DSButtonVariant = .primary,
     size: DSButtonSize = .medium,
     fullWidth: Bool = false,
     isLoading: Bool = false,
@@ -168,7 +324,7 @@ public struct DSButton: View {
     self.title = title
     self.icon = icon
     self.iconPosition = iconPosition
-    self.style = style
+    self.variant = style
     self.size = size
     self.fullWidth = fullWidth
     self.isLoading = isLoading
@@ -178,48 +334,26 @@ public struct DSButton: View {
 
   public var body: some View {
     Button(action: action) {
-      HStack(spacing: DSTheme.Spacing.sm) {
-        if isLoading {
-          ProgressView()
-            .progressViewStyle(CircularProgressViewStyle(tint: effectiveForegroundColor))
-            .scaleEffect(0.8)
-        } else if let icon = icon, iconPosition == .leading {
-          Image(systemName: icon)
-            .font(.system(size: size.iconSize))
-        }
-
-        Text(title)
-          .font(size.font)
-
-        if !isLoading, let icon = icon, iconPosition == .trailing {
-          Image(systemName: icon)
-            .font(.system(size: size.iconSize))
-        }
-      }
-      .frame(maxWidth: fullWidth ? .infinity : nil)
-      .padding(.vertical, size.verticalPadding)
-      .padding(.horizontal, size.horizontalPadding)
-      .foregroundColor(effectiveForegroundColor)
-      .background(effectiveBackgroundColor)
-      .cornerRadius(DSTheme.Radius.md)
-      .overlay(
-        RoundedRectangle(cornerRadius: DSTheme.Radius.md)
-          .stroke(effectiveBorderColor, lineWidth: style.borderColor != nil ? 1 : 0)
-      )
+      Text(title)
     }
+    .buttonStyle(
+      DSButtonStyleBridge(
+        style: buttonStyle,
+        configuration: DSButtonStyleConfiguration(
+          title: title,
+          icon: icon,
+          iconPosition: iconPosition,
+          variant: variant,
+          size: size,
+          fullWidth: fullWidth,
+          isLoading: isLoading,
+          isDisabled: isDisabled,
+          isPressed: false,
+          theme: theme
+        )
+      )
+    )
     .disabled(isDisabled || isLoading)
-  }
-
-  private var effectiveBackgroundColor: Color {
-    isDisabled ? style.disabledBackgroundColor : style.backgroundColor
-  }
-
-  private var effectiveForegroundColor: Color {
-    isDisabled ? style.disabledForegroundColor : style.foregroundColor
-  }
-
-  private var effectiveBorderColor: Color {
-    isDisabled ? Color.gray.opacity(0.3) : (style.borderColor ?? .clear)
   }
 }
 
@@ -236,16 +370,19 @@ public struct DSButtonLink<Destination: View>: View {
   let title: String
   let icon: String?
   let iconPosition: DSButton.IconPosition
-  let style: DSButtonStyle
+  let variant: DSButtonVariant
   let size: DSButtonSize
   let fullWidth: Bool
   let destination: Destination
+
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsButtonStyle) private var buttonStyle
 
   public init(
     _ title: String,
     icon: String? = nil,
     iconPosition: DSButton.IconPosition = .leading,
-    style: DSButtonStyle = .primary,
+    style: DSButtonVariant = .primary,
     size: DSButtonSize = .medium,
     fullWidth: Bool = false,
     destination: Destination
@@ -253,7 +390,7 @@ public struct DSButtonLink<Destination: View>: View {
     self.title = title
     self.icon = icon
     self.iconPosition = iconPosition
-    self.style = style
+    self.variant = style
     self.size = size
     self.fullWidth = fullWidth
     self.destination = destination
@@ -261,31 +398,25 @@ public struct DSButtonLink<Destination: View>: View {
 
   public var body: some View {
     NavigationLink(destination: destination) {
-      HStack(spacing: DSTheme.Spacing.sm) {
-        if let icon = icon, iconPosition == .leading {
-          Image(systemName: icon)
-            .font(.system(size: size.iconSize))
-        }
-
-        Text(title)
-          .font(size.font)
-
-        if let icon = icon, iconPosition == .trailing {
-          Image(systemName: icon)
-            .font(.system(size: size.iconSize))
-        }
-      }
-      .frame(maxWidth: fullWidth ? .infinity : nil)
-      .padding(.vertical, size.verticalPadding)
-      .padding(.horizontal, size.horizontalPadding)
-      .foregroundColor(style.foregroundColor)
-      .background(style.backgroundColor)
-      .cornerRadius(DSTheme.Radius.md)
-      .overlay(
-        RoundedRectangle(cornerRadius: DSTheme.Radius.md)
-          .stroke(style.borderColor ?? .clear, lineWidth: style.borderColor != nil ? 1 : 0)
-      )
+      Text(title)
     }
+    .buttonStyle(
+      DSButtonStyleBridge(
+        style: buttonStyle,
+        configuration: DSButtonStyleConfiguration(
+          title: title,
+          icon: icon,
+          iconPosition: iconPosition,
+          variant: variant,
+          size: size,
+          fullWidth: fullWidth,
+          isLoading: false,
+          isDisabled: false,
+          isPressed: false,
+          theme: theme
+        )
+      )
+    )
   }
 }
 
@@ -300,20 +431,23 @@ public struct DSButtonLink<Destination: View>: View {
 /// ```
 public struct DSIconButton: View {
   let icon: String
-  let style: DSButtonStyle
+  let variant: DSButtonVariant
   let size: DSButtonSize
   let isDisabled: Bool
   let action: () -> Void
 
+  @Environment(\.dsTheme) private var theme
+  @Environment(\.dsButtonStyle) private var buttonStyle
+
   public init(
     _ icon: String,
-    style: DSButtonStyle = .ghost,
+    style: DSButtonVariant = .ghost,
     size: DSButtonSize = .medium,
     isDisabled: Bool = false,
     action: @escaping () -> Void
   ) {
     self.icon = icon
-    self.style = style
+    self.variant = style
     self.size = size
     self.isDisabled = isDisabled
     self.action = action
@@ -322,24 +456,25 @@ public struct DSIconButton: View {
   public var body: some View {
     Button(action: action) {
       Image(systemName: icon)
-        .font(.system(size: size.iconSize))
-        .foregroundColor(isDisabled ? style.disabledForegroundColor : style.foregroundColor)
-        .frame(width: buttonSize, height: buttonSize)
-        .background(isDisabled ? style.disabledBackgroundColor : style.backgroundColor)
-        .clipShape(Circle())
     }
+    .buttonStyle(
+      DSButtonStyleBridge(
+        style: buttonStyle,
+        configuration: DSButtonStyleConfiguration(
+          title: nil,
+          icon: icon,
+          iconPosition: .leading,
+          variant: variant,
+          size: size,
+          fullWidth: false,
+          isLoading: false,
+          isDisabled: isDisabled,
+          isPressed: false,
+          theme: theme
+        )
+      )
+    )
     .disabled(isDisabled)
-  }
-
-  private var buttonSize: CGFloat {
-    switch size {
-    case .small:
-      return 32
-    case .medium:
-      return 40
-    case .large:
-      return 48
-    }
   }
 }
 
@@ -347,7 +482,7 @@ public struct DSIconButton: View {
 
 #Preview("Button Styles") {
   ScrollView {
-    VStack(spacing: DSTheme.Spacing.lg) {
+    VStack(spacing: DSTheme.default.spacing.lg) {
       Group {
         Text("Primary").font(.caption).foregroundColor(.secondary)
         DSButton("Primary Button", icon: "star.fill") { print("Tapped") }
@@ -399,7 +534,7 @@ public struct DSIconButton: View {
 
       Group {
         Text("Icon Buttons").font(.caption).foregroundColor(.secondary)
-        HStack(spacing: DSTheme.Spacing.md) {
+        HStack(spacing: DSTheme.default.spacing.md) {
           DSIconButton("plus", style: .primary) { print("Plus") }
           DSIconButton("heart.fill", style: .destructive) { print("Heart") }
           DSIconButton("gear") { print("Gear") }
